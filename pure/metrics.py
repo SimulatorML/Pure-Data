@@ -46,7 +46,7 @@ class CountTotal(Metric):
 
 @dataclass
 class CountZeros(Metric):
-    """Number of zeros in choosen column"""
+    """Number of zeros in chosen column"""
 
     column: str
 
@@ -65,7 +65,7 @@ class CountZeros(Metric):
 
 @dataclass
 class CountNull(Metric):
-    """Number of empty values in choosen columns"""
+    """Number of empty values in chosen columns"""
 
     columns: List[str]
     aggregation: str = "any"  # either "all", or "any"
@@ -104,7 +104,7 @@ class CountNull(Metric):
 
 @dataclass
 class CountDuplicates(Metric):
-    """Number of duplicates in choosen columns"""
+    """Number of duplicates in chosen columns"""
 
     columns: List[str]
 
@@ -125,7 +125,7 @@ class CountDuplicates(Metric):
 
 @dataclass
 class CountValue(Metric):
-    """Number of values in choosen column"""
+    """Number of values in chosen column"""
 
     column: str
     value: Union[str, int, float]
@@ -228,7 +228,7 @@ class CountRatioBelow(Metric):
         mask = isnan(col(self.column_x)) | col(self.column_x).isNull()
         mask |= isnan(col(self.column_y)) | col(self.column_y).isNull()
         mask |= isnan(col(self.column_z)) | col(self.column_z).isNull()
-        df = df.filter(~(mask))
+        df = df.filter(~mask)
 
         ratio = col(self.column_x) / col(self.column_y)
         if self.strict:
@@ -286,3 +286,143 @@ class CountLag(Metric):
         a = a.strftime(self.fmt)
         b = b.strftime(self.fmt)
         return {"today": a, "last_day": b, "lag": lag}
+
+
+@dataclass
+class CountGreaterValue(Metric):
+    """Number of values below threshold"""
+
+    column: str
+    value: float
+    strict: bool = False
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        if self.strict:
+            k = sum(df[self.column] > self.value)
+        else:
+            k = sum(df[self.column] >= self.value)
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col
+
+        n = df.count()
+        if self.strict:
+            k = df.filter(col(self.column) > self.value).count()
+        else:
+            k = df.filter(col(self.column) >= self.value).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountValueInRequiredSet(Metric):
+    """Number of values out of available set"""
+    column: str
+    available_set: set
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        k = (df[self.column].isin(self.available_set)).sum()
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        n = df.count()
+        from pyspark.sql.functions import col
+        k = df.filter(col(self.column).isin(self.available_set)).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountValueSatisfyBounds(Metric):
+    """Number of values out of available bounds"""
+    column: str
+    low_bound: float
+    upper_bound: float
+    strict: bool
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        if self.strict:
+            k = ((df[self.column] < self.upper_bound) & (df[self.column] > self.low_bound)).sum()
+        else:
+            k = ((df[self.column] <= self.upper_bound) & (df[self.column] >= self.low_bound)).sum()
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col
+        n = df.count()
+        if self.strict:
+            k = df.filter((col(self.column) < self.upper_bound) & (col(self.column) > self.low_bound)).count()
+        else:
+            k = df.filter((col(self.column) <= self.upper_bound) & (col(self.column) >= self.low_bound)).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountExtremeValuesFormula(Metric):
+    """Count of values that might be defined as extreme:
+    value is greater than mean + std_coef * std
+    or lower than mean - std_corf * std"""
+    column: str
+    std_coef: int
+    style: str = "greater"
+    if style not in ['greater', 'lower']:
+        raise ValueError("Style must be either 'greater' or 'lower'.")
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        mean, std = df[self.column].mean(), df[self.column].std()
+        if self.style == "greater":
+            k = (df[self.column] > (mean + self.std_coef * std)).sum()
+        else:
+            k = (df[self.column] < (mean - self.std_coef * std)).sum()
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col, mean, stddev
+        n = df.count()
+        df_stats = df.select(
+            mean(col(self.column)).alias('mean'),
+            stddev(col(self.column)).alias('std')
+        ).collect()
+        mean = df_stats[0]['mean']
+        std = df_stats[0]['std']
+        if self.style == 'greater':
+            k = df.filter(col(self.column) > (mean + self.std_coef * std)).count()
+        else:
+            k = df.filter(col(self.column) < (mean - self.std_coef * std)).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountExtremeValuesQuantile(Metric):
+    """NUmber of values that greater/lower than calculated quantile"""
+    column: str
+    quantile: float
+    style: str = 'greater'
+    if style not in ['greater', 'lower']:
+        raise ValueError("Style must be either 'greater' or 'lower'.")
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        quantile_value = df[self.column].quantile(self.quantile)
+        if self.style == 'greater':
+            k = (df[self.column] > quantile_value).sum()
+        else:
+            k = (df[self.column] < quantile_value).sum()
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql import DataFrameStatFunctions
+        from pyspark.sql.functions import col
+        n = df.count()
+        st = DataFrameStatFunctions(df)
+        quantile_value = st.approxQuantile(self.column, [self.quantile], 0)
+        if self.style == 'greater':
+            k = df.filter(col(self.column) > quantile_value).count()
+        else:
+            k = df.filter(col(self.column) < quantile_value).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
