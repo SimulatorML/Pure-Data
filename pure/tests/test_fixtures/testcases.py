@@ -1,16 +1,36 @@
 """Test cases."""
-METRIC_TESTCASES = {
-    "CountTotal": [{"table": "sales", "params": []}],
-    "CountZeros": [{"table": "sales", "params": ["qty"]}],
-    "CountNull": [
-        {"table": "sales", "params": [["qty", "price"], "any"]},
-        {"table": "sales", "params": [["qty", "price"], "all"]},
+from test_fixtures.tables import TABLES1, TABLES2
+
+
+# Each metric can have multiple test cases with different tables,
+# params and expected results.
+TEST_CASES = {
+    "CountTotal": [
+        {
+            "tables_set": TABLES1,
+            "table_name": "sales",
+            "params": [],
+            "expected_result": {"total": 7},
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": [],
+            "expected_result": {"total": 21},
+        },
     ],
-    "CountDuplicates": [{"table": "sales", "params": [["day", "item_id"]]}],
-    "CountValue": [{"table": "sales", "params": ["qty", 1]}],
-    "CountBelowValue": [{"table": "sales", "params": ["price", 100]}],
-    "CountBelowColumn": [{"table": "views", "params": ["clicks", "views"]}],
-    "CountRatioBelow": [{"table": "sales", "params": ["revenue", "price", "qty"]}],
-    "CountCB": [{"table": "big_table", "params": ["revenue"]}],
-    "CountLag": [{"table": "sales", "params": ["day"]}],
+    "CountZeros": [
+        {
+            "tables_set": TABLES1,
+            "table_name": "sales",
+            "params": ["qty"],
+            "expected_result": {"total": 7, "count": 1, "delta": 0.14285},
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": ["qty"],
+            "expected_result": {"total": 21, "count": 2, "delta": 0.09523},
+        },
+    ],
 }

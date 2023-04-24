@@ -1,66 +1,32 @@
 import numpy as np
-from test_fixtures.tables import TABLES1, TABLES2
+from test_fixtures.testcases import TEST_CASES
 
 from pure import metrics
 
 
-def test_pandas_count_total():
-    """Test CountTotal metric (pandas engine)."""
+def test_metrics_pandas():
+    """Test pandas engine metrics."""
 
-    # TABLE1
+    for metric_name, test_cases in TEST_CASES.items():
+        for case in test_cases:
 
-    table = TABLES1["sales"].copy()
-    metric_result = metrics.CountTotal()(table)
+            tables_set = case["tables_set"]
+            table_name = case["table_name"]
+            params = case["params"]
+            expected_result = case["expected_result"]
 
-    msg = f"Metric 'CountTotal' should " "return Dict[str, Any[float, int, str]]"
-    assert isinstance(metric_result, dict), msg
+            table = tables_set[table_name].copy()
+            metric_result = getattr(metrics, metric_name)(*params)(table)
 
-    expected_result = {"total": 7}
-    msg = (
-        f"Metric {metrics.CountTotal.__name__} returns wrong value."
-        f" Yours value: {metric_result}. Valid value: {expected_result}"
-    )
-    assert metric_result == expected_result, msg
+            msg = (
+                f"Metric '{metric_name}' should "
+                "return Dict[str, Any[float, int, str]]"
+            )
+            assert isinstance(metric_result, dict), msg
 
-    # TABLE2
-
-    table = TABLES2["sales"].copy()
-    metric_result = metrics.CountTotal()(table)
-
-    expected_result = {"total": 21}
-    msg = (
-        f"Metric {metrics.CountTotal.__name__} returns wrong value."
-        f" Yours value: {metric_result}. Valid value: {expected_result}"
-    )
-    assert metric_result == expected_result, msg
-
-
-def test_pandas_count_zeros():
-    """Test CountZeros metric (pandas engine)."""
-
-    # TABLE1
-
-    table = TABLES1["sales"].copy()
-    metric_result = metrics.CountZeros("qty")(table)
-
-    expected_result = {"total": 7, "count": 1, "delta": 0.14285}
-    msg = (
-        f"Metric {metrics.CountZeros.__name__} returns wrong value."
-        f" Yours value: {metric_result}. Valid value: {expected_result}"
-    )
-    for key, value in metric_result.items():
-        assert np.isclose(value, expected_result[key], rtol=1e-04), msg
-
-    # TABLE2
-
-    table = TABLES2["sales"].copy()
-    metric_result = metrics.CountZeros("qty")(table)
-
-    expected_result = {"total": 21, "count": 2, "delta": 0.09523}
-    msg = (
-        f"Metric {metrics.CountZeros.__name__} returns wrong value."
-        f" Yours value: {metric_result}. Valid value: {expected_result}"
-    )
-
-    for key, value in metric_result.items():
-        assert np.isclose(value, expected_result[key], rtol=1e-04), msg
+            msg = (
+                f"Metric {metric_name} returns wrong value."
+                f" Yours value: {metric_result}. Valid value: {expected_result}"
+            )
+            for key, value in metric_result.items():
+                assert np.isclose(value, expected_result[key], rtol=1e-04), msg
