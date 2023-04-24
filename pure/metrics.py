@@ -319,17 +319,17 @@ class CountGreaterValue(Metric):
 class CountValueInRequiredSet(Metric):
     """Number of values out of available set"""
     column: str
-    available_set: set
+    required_set: set
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        k = (df[self.column].isin(self.available_set)).sum()
+        k = (df[self.column].isin(self.required_set)).sum()
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
         from pyspark.sql.functions import col
-        k = df.filter(col(self.column).isin(self.available_set)).count()
+        k = df.filter(col(self.column).isin(self.required_set)).count()
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -363,7 +363,7 @@ class CountValueSatisfyBounds(Metric):
 class CountExtremeValuesFormula(Metric):
     """Count of values that might be defined as extreme:
     value is greater than mean + std_coef * std
-    or lower than mean - std_corf * std"""
+    or lower than mean - std_coef * std"""
     column: str
     std_coef: int
     style: str = "greater"
@@ -380,10 +380,10 @@ class CountExtremeValuesFormula(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, mean, stddev
+        from pyspark.sql.functions import col, mean as mean_, stddev
         n = df.count()
         df_stats = df.select(
-            mean(col(self.column)).alias('mean'),
+            mean_(col(self.column)).alias('mean'),
             stddev(col(self.column)).alias('std')
         ).collect()
         mean = df_stats[0]['mean']
@@ -397,7 +397,7 @@ class CountExtremeValuesFormula(Metric):
 
 @dataclass
 class CountExtremeValuesQuantile(Metric):
-    """NUmber of values that greater/lower than calculated quantile"""
+    """Number of values that greater/lower than calculated quantile"""
     column: str
     quantile: float
     style: str = 'greater'
@@ -406,7 +406,7 @@ class CountExtremeValuesQuantile(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        quantile_value = df[self.column].quantile(self.quantile)
+        quantile_value = df[self.column].quantile(self.quantile, interpolation='higher')
         if self.style == 'greater':
             k = (df[self.column] > quantile_value).sum()
         else:
@@ -418,7 +418,7 @@ class CountExtremeValuesQuantile(Metric):
         from pyspark.sql.functions import col
         n = df.count()
         st = DataFrameStatFunctions(df)
-        quantile_value = st.approxQuantile(self.column, [self.quantile], 0)
+        quantile_value = st.approxQuantile(self.column, [self.quantile], 0)[0]
         if self.style == 'greater':
             k = df.filter(col(self.column) > quantile_value).count()
         else:
@@ -426,3 +426,30 @@ class CountExtremeValuesQuantile(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
 
+@dataclass
+class CountRowsInLastDay(Metric):
+    """Check if count of values in last day is at least 'percent'% of the average"""
+    column: str
+    percent: float = 80
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        flag = False
+        mean = df.groupby(pd.to_datetime(df[self.column]).dt.date).size().mean()
+        last_date = df[self.column].max()
+        last_date_count = len(df[df[self.column] == last_date])
+        percentage = (last_date_count / mean) * 100
+        if percentage >= self.percent:
+            flag = True
+        return {f'{self.percent}_percent': flag}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col, to_date, mean as mean_, max as max_
+        flag = False
+        df_to_date = df.select(to_date(col(self.column)).alias('date'))
+        mean = df_to_date.groupby('date').count().select(mean_('count')).collect()[0][0]
+        last_date = df_to_date.select(max_('date')).collect()[0][0]
+        last_date_count = df_to_date.filter(col('date') == last_date).count()
+        percentage = (last_date_count / mean) * 100
+        if percentage >= self.percent:
+            flag = True
+        return {f'{self.percent}_percent': flag}
