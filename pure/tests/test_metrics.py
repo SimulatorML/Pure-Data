@@ -1,5 +1,5 @@
 import numpy as np
-from test_fixtures.testcases import TEST_CASES
+from test_fixtures.metric_cases import TEST_CASES as metric_cases
 
 from pure import metrics
 
@@ -7,7 +7,7 @@ from pure import metrics
 def test_metrics_pandas():
     """Test pandas engine metrics."""
 
-    for metric_name, test_cases in TEST_CASES.items():
+    for metric_name, test_cases in metric_cases.items():
         for case in test_cases:
 
             tables_set = case["tables_set"]
