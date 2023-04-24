@@ -35,7 +35,7 @@ class Metric:
 
 @dataclass
 class CountTotal(Metric):
-    """Total number of rows in DataFrame"""
+    """Total number of rows in DataFrame."""
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         return {"total": len(df)}
@@ -46,7 +46,10 @@ class CountTotal(Metric):
 
 @dataclass
 class CountZeros(Metric):
-    """Number of zeros in chosen column"""
+    """Number of zeros in chosen column.
+
+    Count rows where value in chosen column is equal to zero.
+    """
 
     column: str
 
@@ -65,7 +68,13 @@ class CountZeros(Metric):
 
 @dataclass
 class CountNull(Metric):
-    """Number of empty values in chosen columns"""
+    """Number of empty values in chosen columns.
+
+    If 'aggregation' == 'any', then count rows where
+    at least one value from defined 'columns' set is Null.
+    If 'aggregation' == 'all', then count rows where
+    all values from defined 'columns' set are Null.
+    """
 
     columns: List[str]
     aggregation: str = "any"  # either "all", or "any"
@@ -104,7 +113,7 @@ class CountNull(Metric):
 
 @dataclass
 class CountDuplicates(Metric):
-    """Number of duplicates in chosen columns"""
+    """Number of duplicates in chosen columns."""
 
     columns: List[str]
 
@@ -125,7 +134,10 @@ class CountDuplicates(Metric):
 
 @dataclass
 class CountValue(Metric):
-    """Number of values in chosen column"""
+    """Number of values in chosen column.
+
+    Count rows that value in chosen column is equal to 'value'.
+    """
 
     column: str
     value: Union[str, int, float]
@@ -145,7 +157,12 @@ class CountValue(Metric):
 
 @dataclass
 class CountBelowValue(Metric):
-    """Number of values below threshold"""
+    """Number of values below threshold.
+
+    Count values in chosen column
+    that are lower than defined threshold ('value').
+    If 'strict' == False, then inequality is non-strict.
+    """
 
     column: str
     value: float
@@ -172,7 +189,11 @@ class CountBelowValue(Metric):
 
 @dataclass
 class CountBelowColumn(Metric):
-    """Count how often column X below Y"""
+    """Count how often column X below Y.
+
+    Calculate number of rows that value in 'column_x'
+    is lower than value in 'column_y'.
+    """
 
     column_x: str
     column_y: str
@@ -204,7 +225,12 @@ class CountBelowColumn(Metric):
 
 @dataclass
 class CountRatioBelow(Metric):
-    """Count how often X / Y below Z"""
+    """Count how often X / Y below Z.
+
+    Calculate number of rows that ratio of values
+    in columns 'column_x' and 'column_y' is lower than value in 'column_z'.
+    If 'strict' == False, then inequality is non-strict.
+    """
 
     column_x: str
     column_y: str
@@ -240,7 +266,10 @@ class CountRatioBelow(Metric):
 
 @dataclass
 class CountCB(Metric):
-    """Calculate lower/upper bounds for N%-confidence interval"""
+    """Lower/upper bounds for N%-confidence interval.
+
+    Calculate bounds for 'conf'-percent interval in chosen column.
+    """
 
     column: str
     conf: float = 0.95
@@ -262,7 +291,11 @@ class CountCB(Metric):
 
 @dataclass
 class CountLag(Metric):
-    """A lag between latest date and today"""
+    """A lag between last date and today.
+
+    Define last date in chosen date column.
+    Calculate a lag in days between last date and today.
+    """
 
     column: str
     fmt: str = "%Y-%m-%d"
@@ -290,7 +323,12 @@ class CountLag(Metric):
 
 @dataclass
 class CountGreaterValue(Metric):
-    """Number of values below threshold"""
+    """Number of values greater than threshold.
+
+    Count values in chosen column
+    that are greater than defined threshold ('value').
+    If 'strict' == False, then inequality is non-strict.
+    """
 
     column: str
     value: float
@@ -317,7 +355,11 @@ class CountGreaterValue(Metric):
 
 @dataclass
 class CountValueInRequiredSet(Metric):
-    """Number of values out of available set"""
+    """Number of values that satisfy possible values set.
+
+    Count values in chosen column
+    that are included in the given set ('required_set').
+    """
     column: str
     required_set: set
 
@@ -335,11 +377,16 @@ class CountValueInRequiredSet(Metric):
 
 @dataclass
 class CountValueSatisfyBounds(Metric):
-    """Number of values out of available bounds"""
+    """Number of values out of available bounds.
+
+    Count values in chosen column that satisfy defined bounds:
+    they are greater than 'low_bound' and lower than 'upper_bound'.
+    If 'strict' is False, then inequalities are non-strict.
+    """
     column: str
     low_bound: float
     upper_bound: float
-    strict: bool
+    strict: bool = False
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -361,9 +408,13 @@ class CountValueSatisfyBounds(Metric):
 
 @dataclass
 class CountExtremeValuesFormula(Metric):
-    """Count of values that might be defined as extreme:
-    value is greater than mean + std_coef * std
-    or lower than mean - std_coef * std"""
+    """Number of extreme values calculated by formula.
+
+    Calculate mean and std in chosen column.
+    Count values in chosen column that are
+    greater than mean + std_coef * std if style == 'greater',
+    lower than mean - std_coef * std if style == 'lower'.
+    """
     column: str
     std_coef: int
     style: str = "greater"
@@ -397,7 +448,13 @@ class CountExtremeValuesFormula(Metric):
 
 @dataclass
 class CountExtremeValuesQuantile(Metric):
-    """Number of values that greater/lower than calculated quantile"""
+    """Number of extreme values calculated with quantile.
+
+    Calculate quantile in chosen column.
+    If style == 'greater', then count values in 'column' that are greater than
+    calculated quantile. Otherwise, if style == 'lower', count values that are lower
+    than calculated quantile.
+    """
     column: str
     quantile: float
     style: str = 'greater'
@@ -428,7 +485,13 @@ class CountExtremeValuesQuantile(Metric):
 
 @dataclass
 class CountRowsInLastDay(Metric):
-    """Check if count of values in last day is at least 'percent'% of the average"""
+    """Check if count of values in last day is at least 'percent'% of the average.
+
+    Calculate average number of rows per day in chosen date column.
+    If number of rows in last day is at least 'percent' value of the average, then
+    return True, else return False.
+
+    """
     column: str
     percent: float = 80
 
