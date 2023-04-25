@@ -360,6 +360,7 @@ class CountValueInRequiredSet(Metric):
     Count values in chosen column
     that are included in the given set ('required_set').
     """
+
     column: str
     required_set: set
 
@@ -383,6 +384,7 @@ class CountValueSatisfyBounds(Metric):
     they are greater than 'low_bound' and lower than 'upper_bound'.
     If 'strict' is False, then inequalities are non-strict.
     """
+
     column: str
     low_bound: float
     upper_bound: float
@@ -415,6 +417,7 @@ class CountExtremeValuesFormula(Metric):
     greater than mean + std_coef * std if style == 'greater',
     lower than mean - std_coef * std if style == 'lower'.
     """
+
     column: str
     std_coef: int
     style: str = "greater"
@@ -455,6 +458,7 @@ class CountExtremeValuesQuantile(Metric):
     calculated quantile. Otherwise, if style == 'lower', count values that are lower
     than calculated quantile.
     """
+
     column: str
     quantile: float
     style: str = 'greater'
@@ -490,8 +494,8 @@ class CountRowsInLastDay(Metric):
     Calculate average number of rows per day in chosen date column.
     If number of rows in last day is at least 'percent' value of the average, then
     return True, else return False.
-
     """
+
     column: str
     percent: float = 80
 
@@ -516,3 +520,50 @@ class CountRowsInLastDay(Metric):
         if percentage >= self.percent:
             flag = True
         return {f'{self.percent}_percent': flag}
+
+
+@dataclass
+class CheckAdversarialValidation(Metric):
+    """Apply adversarial validation technic.
+
+    Define indexes for first and second slices.
+    For given slices of data apply adversarial technic
+    to check if distributions of slices are the same or not.
+    If there is a doubt about first slice being indistinguishable
+    with the second slice, then return False and column names that might
+    include some crucial differences.
+    Otherwise, if classification score is about 0.5, return True.
+
+    Take into consideration only numerical columns.
+    """
+
+    first_slice: tuple
+    second_slice: tuple
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        flag = False
+        column_names = []
+
+        if len(self.first_slice) != 2 or len(self.second_slice) != 2:
+            raise ValueError("Slices must be length of 2.")
+        start_1, end_1 = self.first_slice[0], self.first_slice[1]
+        start_2, end_2 = self.second_slice[0], self.second_slice[1]
+        if start_1 >= end_1 or start_2 >= end_2:
+            raise ValueError("First value in slice must be lower than second value in slice.")
+
+        # обернуть в try except, если переданы не индексы
+        first_part = df.select_dtypes(include=['number']).loc[start_1:end_1, :]
+        second_part = df.select_dtypes(include=['number']).loc[start_2:end_2, :]
+
+        first_part.insert(0, 'av_label', 0)
+        second_part.insert(0, 'av_label', 1)
+
+
+
+
+        return {"different": flag, "columns": column_names}
+
+    def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
+        flag = False
+        column_names = []
+        return {"different": flag, "columns": column_names}
