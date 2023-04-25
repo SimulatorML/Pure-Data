@@ -1,7 +1,6 @@
 """Test cases."""
 from pure.metrics import *
 
-
 # Checklist contains checks consist of:
 # - table_name
 # - metric
@@ -11,8 +10,7 @@ CHECKLIST1 = [
     # Table with sales ["day", "item_id", "qty", "revenue", "price"]
     ("sales", CountTotal(), {"total": (1, 1e6)}),
     ("sales", CountZeros("qty"), {"delta": (0, 0.3)}),
-
-    # TODO refact 
+    # TODO refact
     # ("sales", valid.CountLag("day"), {"lag": (0, 3)}),
     # ("sales", valid.CountDuplicates(["day", "item_id"]), {"total": (0, 0)}),
     # ("sales", valid.CountNull(["qty"]), {"total": (0, 0)}),
@@ -22,7 +20,6 @@ CHECKLIST1 = [
     #     {"delta": (0, 0.05)},
     # ),
     # ("big_table", valid.CountCB("revenue"), {}),
-
     # ("sales", valid.CountBelowValue("price", 100.0), {"delta": (0, 0.3)}),
     # # Table with clickstream ["dt", "item_id", "views", "clicks", "payments"]
     # ("views", valid.CountTotal(), {"total": (1, 1e6)}),

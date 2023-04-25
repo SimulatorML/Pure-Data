@@ -1,65 +1,54 @@
-import numpy as np
-from test_fixtures.metric_cases import TEST_CASES as metric_cases
-from test_fixtures.report_checklists import CHECKLIST1 as checklist
-from test_fixtures.tables import TABLES1, TABLES2
-from test_fixtures.report_cases import TEST_CASES as report_cases
-
-from pure.report import Report
+import os
 import pickle
 
 import pandas as pd
-import sys
-import os
+from test_fixtures.report_cases import TEST_CASES as report_cases
 
-
-dir = os.path.abspath(os.path.dirname(__file__))
-dump_f = os.path.join(dir, 'test_fixtures', 'report_dumps', 'dump1.pkl')
+from pure.report import Report
 
 
 def test_report_pandas():
 
-    checked_tables = TABLES1
+    dir = os.path.abspath(os.path.dirname(__file__))
+    dumps_path = os.path.join(dir, "test_fixtures", "report_dumps")
 
+    for case in report_cases:
+        tables_set = case["tables_set"]
+        checklist = case["checklist"]
+        dump_file = os.path.join(dumps_path, case["expected_result_dump_file"])
 
-    result = Report(checklist).fit(checked_tables)
+        expected_result = pickle.load(open(dump_file, "rb"))
 
+        result = Report(checklist).fit(tables_set)
 
-    correct_order = [(row[0], str(row[1])) for row in checklist]
-    result_order = [
-        (row[1]["table_name"], row[1]["metric"])
-        for row in result["result"].iterrows()
-    ]
+        correct_order = [(row[0], str(row[1])) for row in checklist]
+        result_order = [
+            (row[1]["table_name"], row[1]["metric"])
+            for row in result["result"].iterrows()
+        ]
 
-    msg = (
-        "Wrong order of metrics in result. "
-        "Order should be the same as in checklist. "
-        f"Expected order: {correct_order}. "
-        f"Yours order: {result_order}."
-    )
-    assert correct_order == result_order, msg
-
-
-    expected_result = pickle.load(
-        open(dump_f, "rb")
-    )
-    
-    assert_report_equals(expected_result['result'], result["result"])
-
-    keys_to_check = list(result.keys())
-    keys_to_check.remove("result")
-    for key in keys_to_check:
         msg = (
-            "Method fit() return wrong result. "
-            f'For key "{key}" expected value: {result[key]}. '
-            f"Yours value: {result[key]}"
+            "Wrong order of metrics in result. "
+            "Order should be the same as in checklist. "
+            f"Expected order: {correct_order}. "
+            f"Yours order: {result_order}."
         )
-        assert result[key] == result[key], msg
+        assert correct_order == result_order, msg
+
+        assert_report_equals(expected_result["result"], result["result"])
+
+        keys_to_check = list(result.keys())
+        keys_to_check.remove("result")
+        for key in keys_to_check:
+            msg = (
+                "Method fit() return wrong result. "
+                f'For key "{key}" expected value: {result[key]}. '
+                f"Yours value: {result[key]}"
+            )
+            assert result[key] == result[key], msg
 
 
-
-def assert_report_equals(
-    user_report: pd.DataFrame, valid_report: pd.DataFrame
-) -> None:
+def assert_report_equals(user_report: pd.DataFrame, valid_report: pd.DataFrame) -> None:
     """Check that user's report equals valid report.
     For float metric's values checks non-strict equality within error
 
@@ -82,9 +71,7 @@ def assert_report_equals(
     )
     assert user_report.shape == valid_report.shape, msg
 
-    for (_, user), (_, valid) in zip(
-        user_report.iterrows(), valid_report.iterrows()
-    ):
+    for (_, user), (_, valid) in zip(user_report.iterrows(), valid_report.iterrows()):
 
         msg = (
             "Reports's structure is wrong. Report should contain columns: "
