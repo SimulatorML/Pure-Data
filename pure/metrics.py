@@ -6,6 +6,9 @@ import datetime
 
 import pandas as pd
 import pyspark.sql as ps
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import RandomForestClassifier
+import numpy as np
 
 
 @dataclass
@@ -529,9 +532,9 @@ class CheckAdversarialValidation(Metric):
     Define indexes for first and second slices.
     For given slices of data apply adversarial technic
     to check if distributions of slices are the same or not.
-    If there is a doubt about first slice being indistinguishable
-    with the second slice, then return False and column names that might
-    include some crucial differences.
+    If there is a doubt about first slice being
+    indistinguishable with the second slice, then return False
+    and dict with importance values for each column.
     Otherwise, if classification score is about 0.5, return True.
 
     Take into consideration only numerical columns.
@@ -539,10 +542,11 @@ class CheckAdversarialValidation(Metric):
 
     first_slice: tuple
     second_slice: tuple
+    eps: float = 0.05
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
-        flag = False
-        column_names = []
+        flag = True
+        importance_dict = {}
 
         if len(self.first_slice) != 2 or len(self.second_slice) != 2:
             raise ValueError("Slices must be length of 2.")
@@ -551,19 +555,33 @@ class CheckAdversarialValidation(Metric):
         if start_1 >= end_1 or start_2 >= end_2:
             raise ValueError("First value in slice must be lower than second value in slice.")
 
-        # обернуть в try except, если переданы не индексы
+        # make try except, if slices contain non-index values
         first_part = df.select_dtypes(include=['number']).loc[start_1:end_1, :]
         second_part = df.select_dtypes(include=['number']).loc[start_2:end_2, :]
 
         first_part.insert(0, 'av_label', 0)
         second_part.insert(0, 'av_label', 1)
 
+        data = pd.concat([first_part, second_part], axis=1)
+        shuffled_data = data.sample(frac=1)
+        shuffled_data = shuffled_data.fillna()
 
+        X, y = shuffled_data.drop(['av_label'], axis=1), shuffled_data['av_label']
 
+        # cross validation, binary classifier
+        classifier = RandomForestClassifier(random_state=42)
+        scores = cross_val_score(classifier, X, y, cv=5, scoring='roc_auc')
+        mean_score = np.mean(scores)
+        if mean_score > 0.5 + self.eps:
+            flag = False
+            forest = RandomForestClassifier(random_state=42)
+            forest.fit(X, y)
+            importances = forest.feature_importances_
+            importance_dict = dict(zip(X.columns, importances))
 
-        return {"different": flag, "columns": column_names}
+        return {"different": flag, "importances": importance_dict}
 
     def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
-        flag = False
-        column_names = []
-        return {"different": flag, "columns": column_names}
+        flag = True
+        importance_dict = {}
+        return {"different": flag, "importances": importance_dict}
