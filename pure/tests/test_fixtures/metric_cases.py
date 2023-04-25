@@ -1,7 +1,6 @@
 """Test cases."""
 from test_fixtures.tables import TABLES1, TABLES2
 
-
 # Each metric can have multiple test cases with different tables,
 # params and expected results.
 TEST_CASES = {
