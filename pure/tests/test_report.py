@@ -1,11 +1,19 @@
 import numpy as np
 from test_fixtures.metric_cases import TEST_CASES as metric_cases
-from test_fixtures.report_checklist import CHECKLIST as checklist
+from test_fixtures.report_checklists import CHECKLIST1 as checklist
 from test_fixtures.tables import TABLES1, TABLES2
+from test_fixtures.report_cases import TEST_CASES as report_cases
 
 from pure.report import Report
+import pickle
 
 import pandas as pd
+import sys
+import os
+
+
+dir = os.path.abspath(os.path.dirname(__file__))
+dump_f = os.path.join(dir, 'test_fixtures', 'report_dumps', 'dump1.pkl')
 
 
 def test_report_pandas():
@@ -31,7 +39,11 @@ def test_report_pandas():
     assert correct_order == result_order, msg
 
 
-    assert_report_equals(result["result"], result["result"])
+    expected_result = pickle.load(
+        open(dump_f, "rb")
+    )
+    
+    assert_report_equals(expected_result['result'], result["result"])
 
     keys_to_check = list(result.keys())
     keys_to_check.remove("result")

@@ -1,5 +1,4 @@
 """Test cases."""
-from test_fixtures.tables import TABLES1, TABLES2
 from pure.metrics import *
 
 
@@ -8,7 +7,7 @@ from pure.metrics import *
 # - metric
 # - limits
 
-CHECKLIST = [
+CHECKLIST1 = [
     # Table with sales ["day", "item_id", "qty", "revenue", "price"]
     ("sales", CountTotal(), {"total": (1, 1e6)}),
     ("sales", CountZeros("qty"), {"delta": (0, 0.3)}),
