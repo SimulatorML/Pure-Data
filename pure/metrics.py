@@ -528,6 +528,30 @@ class CountLastDayRows(Metric):
 
 
 @dataclass
+class CountFewLastDayRows(Metric):
+    """
+    Calculate average number of rows per day in chosen date column.
+    For each of the last 'number' days, check if number of rows in the day
+    is at least 'percent' of the average.
+    """
+
+    column: str
+    percent: float = 80
+    number: int = 2
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        sorted_df = df.sort_values(by=self.column)
+        sorted_df[self.column] = pd.to_datetime(sorted_df[self.column])
+        rows_per_day = sorted_df.groupby(sorted_df[self.column].dt.date).size()
+        average = rows_per_day[:-self.number].mean()
+        k = ((rows_per_day[-self.number:] / average * 100) >= self.percent).sum()
+        return {'average': average, 'days': k}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        ...
+
+
+@dataclass
 class CheckAdversarialValidation(Metric):
     """Apply adversarial validation technic.
 
@@ -589,3 +613,5 @@ class CheckAdversarialValidation(Metric):
         importance_dict = {}
         mean_score = 0
         return {"different": flag, "columns": importance_dict, "cv_roc_auc": mean_score}
+
+
