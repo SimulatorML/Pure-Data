@@ -380,11 +380,11 @@ class CountValueInRequiredSet(Metric):
 
 
 @dataclass
-class CountValueSatisfyBounds(Metric):
+class CountValueOutOfBounds(Metric):
     """Number of values out of available bounds.
 
-    Count values in chosen column that satisfy defined bounds:
-    they are greater than 'low_bound' and lower than 'upper_bound'.
+    Count values in chosen column that do not satisfy defined bounds:
+    they are lower than 'low_bound' or greater than 'upper_bound'.
     If 'strict' is False, then inequalities are non-strict.
     """
 
@@ -396,18 +396,18 @@ class CountValueSatisfyBounds(Metric):
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         if self.strict:
-            k = ((df[self.column] < self.upper_bound) & (df[self.column] > self.low_bound)).sum()
+            k = ((df[self.column] > self.upper_bound) | (df[self.column] < self.low_bound)).sum()
         else:
-            k = ((df[self.column] <= self.upper_bound) & (df[self.column] >= self.low_bound)).sum()
+            k = ((df[self.column] > self.upper_bound) | (df[self.column] <= self.low_bound)).sum()
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         from pyspark.sql.functions import col
         n = df.count()
         if self.strict:
-            k = df.filter((col(self.column) < self.upper_bound) & (col(self.column) > self.low_bound)).count()
+            k = df.filter((col(self.column) > self.upper_bound) | (col(self.column) < self.low_bound)).count()
         else:
-            k = df.filter((col(self.column) <= self.upper_bound) & (col(self.column) >= self.low_bound)).count()
+            k = df.filter((col(self.column) >= self.upper_bound) | (col(self.column) <= self.low_bound)).count()
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -491,8 +491,8 @@ class CountExtremeValuesQuantile(Metric):
 
 
 @dataclass
-class CountRowsInLastDay(Metric):
-    """Check if count of values in last day is at least 'percent'% of the average.
+class CountLastDayRows(Metric):
+    """Check if number of values in last day is at least 'percent'% of the average.
 
     Calculate average number of rows per day in chosen date column.
     If number of rows in last day is at least 'percent' value of the average, then
@@ -503,26 +503,28 @@ class CountRowsInLastDay(Metric):
     percent: float = 80
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
-        flag = False
-        mean = df.groupby(pd.to_datetime(df[self.column]).dt.date).size().mean()
+        at_least = False
+        average = df.groupby(pd.to_datetime(df[self.column]).dt.date).size().mean()
         last_date = df[self.column].max()
         last_date_count = len(df[df[self.column] == last_date])
-        percentage = (last_date_count / mean) * 100
+        percentage = (last_date_count / average) * 100
         if percentage >= self.percent:
-            flag = True
-        return {f'{self.percent}_percent': flag}
+            at_least = True
+        return {'average': average, 'last_date': last_date_count, 'percentage': percentage,
+                f'at_least_{self.percent}%': at_least}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         from pyspark.sql.functions import col, to_date, mean as mean_, max as max_
-        flag = False
+        at_least = False
         df_to_date = df.select(to_date(col(self.column)).alias('date'))
-        mean = df_to_date.groupby('date').count().select(mean_('count')).collect()[0][0]
+        average = df_to_date.groupby('date').count().select(mean_('count')).collect()[0][0]
         last_date = df_to_date.select(max_('date')).collect()[0][0]
         last_date_count = df_to_date.filter(col('date') == last_date).count()
-        percentage = (last_date_count / mean) * 100
+        percentage = (last_date_count / average) * 100
         if percentage >= self.percent:
-            flag = True
-        return {f'{self.percent}_percent': flag}
+            at_least = True
+        return {'average': average, 'last_date': last_date_count, 'percentage': percentage,
+                f'at_least_{self.percent}%': at_least}
 
 
 @dataclass
@@ -533,8 +535,9 @@ class CheckAdversarialValidation(Metric):
     For given slices of data apply adversarial technic
     to check if distributions of slices are the same or not.
     If there is a doubt about first slice being
-    indistinguishable with the second slice, then return False
-    and dict with importance values for each column.
+    indistinguishable with the second slice,
+    then return False and list of column names
+    that might include some crucial differences.
     Otherwise, if classification score is about 0.5, return True.
 
     Take into consideration only numerical columns.
@@ -562,9 +565,9 @@ class CheckAdversarialValidation(Metric):
         first_part.insert(0, 'av_label', 0)
         second_part.insert(0, 'av_label', 1)
 
-        data = pd.concat([first_part, second_part], axis=1)
+        data = pd.concat([first_part, second_part], axis=0)
         shuffled_data = data.sample(frac=1)
-        shuffled_data = shuffled_data.fillna()
+        shuffled_data = shuffled_data.fillna(np.min(shuffled_data.min()) - 1000)
 
         X, y = shuffled_data.drop(['av_label'], axis=1), shuffled_data['av_label']
 
@@ -579,9 +582,10 @@ class CheckAdversarialValidation(Metric):
             importances = forest.feature_importances_
             importance_dict = dict(zip(X.columns, importances))
 
-        return {"different": flag, "importances": importance_dict}
+        return {"different": flag, "columns": importance_dict, "cv_roc_auc": mean_score}
 
     def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
         flag = True
         importance_dict = {}
-        return {"different": flag, "importances": importance_dict}
+        mean_score = 0
+        return {"different": flag, "columns": importance_dict, "cv_roc_auc": mean_score}
