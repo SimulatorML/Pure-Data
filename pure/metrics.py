@@ -6,6 +6,9 @@ import datetime
 
 import pandas as pd
 import pyspark.sql as ps
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import RandomForestClassifier
+import numpy as np
 
 
 @dataclass
@@ -35,7 +38,7 @@ class Metric:
 
 @dataclass
 class CountTotal(Metric):
-    """Total number of rows in DataFrame"""
+    """Total number of rows in DataFrame."""
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         return {"total": len(df)}
@@ -46,7 +49,10 @@ class CountTotal(Metric):
 
 @dataclass
 class CountZeros(Metric):
-    """Number of zeros in choosen column"""
+    """Number of zeros in chosen column.
+
+    Count rows where value in chosen column is equal to zero.
+    """
 
     column: str
 
@@ -65,7 +71,13 @@ class CountZeros(Metric):
 
 @dataclass
 class CountNull(Metric):
-    """Number of empty values in choosen columns"""
+    """Number of empty values in chosen columns.
+
+    If 'aggregation' == 'any', then count rows where
+    at least one value from defined 'columns' set is Null.
+    If 'aggregation' == 'all', then count rows where
+    all values from defined 'columns' set are Null.
+    """
 
     columns: List[str]
     aggregation: str = "any"  # either "all", or "any"
@@ -104,7 +116,7 @@ class CountNull(Metric):
 
 @dataclass
 class CountDuplicates(Metric):
-    """Number of duplicates in choosen columns"""
+    """Number of duplicates in chosen columns."""
 
     columns: List[str]
 
@@ -125,7 +137,10 @@ class CountDuplicates(Metric):
 
 @dataclass
 class CountValue(Metric):
-    """Number of values in choosen column"""
+    """Number of values in chosen column.
+
+    Count rows that value in chosen column is equal to 'value'.
+    """
 
     column: str
     value: Union[str, int, float]
@@ -145,7 +160,12 @@ class CountValue(Metric):
 
 @dataclass
 class CountBelowValue(Metric):
-    """Number of values below threshold"""
+    """Number of values below threshold.
+
+    Count values in chosen column
+    that are lower than defined threshold ('value').
+    If 'strict' == False, then inequality is non-strict.
+    """
 
     column: str
     value: float
@@ -172,7 +192,11 @@ class CountBelowValue(Metric):
 
 @dataclass
 class CountBelowColumn(Metric):
-    """Count how often column X below Y"""
+    """Count how often column X below Y.
+
+    Calculate number of rows that value in 'column_x'
+    is lower than value in 'column_y'.
+    """
 
     column_x: str
     column_y: str
@@ -204,7 +228,12 @@ class CountBelowColumn(Metric):
 
 @dataclass
 class CountRatioBelow(Metric):
-    """Count how often X / Y below Z"""
+    """Count how often X / Y below Z.
+
+    Calculate number of rows that ratio of values
+    in columns 'column_x' and 'column_y' is lower than value in 'column_z'.
+    If 'strict' == False, then inequality is non-strict.
+    """
 
     column_x: str
     column_y: str
@@ -228,7 +257,7 @@ class CountRatioBelow(Metric):
         mask = isnan(col(self.column_x)) | col(self.column_x).isNull()
         mask |= isnan(col(self.column_y)) | col(self.column_y).isNull()
         mask |= isnan(col(self.column_z)) | col(self.column_z).isNull()
-        df = df.filter(~(mask))
+        df = df.filter(~mask)
 
         ratio = col(self.column_x) / col(self.column_y)
         if self.strict:
@@ -240,7 +269,10 @@ class CountRatioBelow(Metric):
 
 @dataclass
 class CountCB(Metric):
-    """Calculate lower/upper bounds for N%-confidence interval"""
+    """Lower/upper bounds for N%-confidence interval.
+
+    Calculate bounds for 'conf'-percent interval in chosen column.
+    """
 
     column: str
     conf: float = 0.95
@@ -262,7 +294,11 @@ class CountCB(Metric):
 
 @dataclass
 class CountLag(Metric):
-    """A lag between latest date and today"""
+    """A lag between last date and today.
+
+    Define last date in chosen date column.
+    Calculate a lag in days between last date and today.
+    """
 
     column: str
     fmt: str = "%Y-%m-%d"
@@ -286,3 +322,293 @@ class CountLag(Metric):
         a = a.strftime(self.fmt)
         b = b.strftime(self.fmt)
         return {"today": a, "last_day": b, "lag": lag}
+
+
+@dataclass
+class CountGreaterValue(Metric):
+    """Number of values greater than threshold.
+
+    Count values in chosen column
+    that are greater than defined threshold ('value').
+    If 'strict' == False, then inequality is non-strict.
+    """
+
+    column: str
+    value: float
+    strict: bool = False
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        if self.strict:
+            k = sum(df[self.column] > self.value)
+        else:
+            k = sum(df[self.column] >= self.value)
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col
+
+        n = df.count()
+        if self.strict:
+            k = df.filter(col(self.column) > self.value).count()
+        else:
+            k = df.filter(col(self.column) >= self.value).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountValueInRequiredSet(Metric):
+    """Number of values that satisfy possible values set.
+
+    Count values in chosen column
+    that are included in the given set ('required_set').
+    """
+
+    column: str
+    required_set: set
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        k = (df[self.column].isin(self.required_set)).sum()
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        n = df.count()
+        from pyspark.sql.functions import col
+        k = df.filter(col(self.column).isin(self.required_set)).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountValueOutOfBounds(Metric):
+    """Number of values out of available bounds.
+
+    Count values in chosen column that do not satisfy defined bounds:
+    they are lower than 'low_bound' or greater than 'upper_bound'.
+    If 'strict' is False, then inequalities are non-strict.
+    """
+
+    column: str
+    low_bound: float
+    upper_bound: float
+    strict: bool = False
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        if self.strict:
+            k = ((df[self.column] > self.upper_bound) | (df[self.column] < self.low_bound)).sum()
+        else:
+            k = ((df[self.column] > self.upper_bound) | (df[self.column] <= self.low_bound)).sum()
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col
+        n = df.count()
+        if self.strict:
+            k = df.filter((col(self.column) > self.upper_bound) | (col(self.column) < self.low_bound)).count()
+        else:
+            k = df.filter((col(self.column) >= self.upper_bound) | (col(self.column) <= self.low_bound)).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountExtremeValuesFormula(Metric):
+    """Number of extreme values calculated by formula.
+
+    Calculate mean and std in chosen column.
+    Count values in chosen column that are
+    greater than mean + std_coef * std if style == 'greater',
+    lower than mean - std_coef * std if style == 'lower'.
+    """
+
+    column: str
+    std_coef: int
+    style: str = "greater"
+    if style not in ['greater', 'lower']:
+        raise ValueError("Style must be either 'greater' or 'lower'.")
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        mean, std = df[self.column].mean(), df[self.column].std()
+        if self.style == "greater":
+            k = (df[self.column] > (mean + self.std_coef * std)).sum()
+        else:
+            k = (df[self.column] < (mean - self.std_coef * std)).sum()
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col, mean as mean_, stddev
+        n = df.count()
+        df_stats = df.select(
+            mean_(col(self.column)).alias('mean'),
+            stddev(col(self.column)).alias('std')
+        ).collect()
+        mean = df_stats[0]['mean']
+        std = df_stats[0]['std']
+        if self.style == 'greater':
+            k = df.filter(col(self.column) > (mean + self.std_coef * std)).count()
+        else:
+            k = df.filter(col(self.column) < (mean - self.std_coef * std)).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountExtremeValuesQuantile(Metric):
+    """Number of extreme values calculated with quantile.
+
+    Calculate quantile in chosen column.
+    If style == 'greater', then count values in 'column' that are greater than
+    calculated quantile. Otherwise, if style == 'lower', count values that are lower
+    than calculated quantile.
+    """
+
+    column: str
+    quantile: float
+    style: str = 'greater'
+    if style not in ['greater', 'lower']:
+        raise ValueError("Style must be either 'greater' or 'lower'.")
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+        quantile_value = df[self.column].quantile(self.quantile, interpolation='higher')
+        if self.style == 'greater':
+            k = (df[self.column] > quantile_value).sum()
+        else:
+            k = (df[self.column] < quantile_value).sum()
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql import DataFrameStatFunctions
+        from pyspark.sql.functions import col
+        n = df.count()
+        st = DataFrameStatFunctions(df)
+        quantile_value = st.approxQuantile(self.column, [self.quantile], 0)[0]
+        if self.style == 'greater':
+            k = df.filter(col(self.column) > quantile_value).count()
+        else:
+            k = df.filter(col(self.column) < quantile_value).count()
+        return {"total": n, "count": k, "delta": k / n}
+
+
+@dataclass
+class CountLastDayRows(Metric):
+    """Check if number of values in last day is at least 'percent'% of the average.
+
+    Calculate average number of rows per day in chosen date column.
+    If number of rows in last day is at least 'percent' value of the average, then
+    return True, else return False.
+    """
+
+    column: str
+    percent: float = 80
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        at_least = False
+        average = df.groupby(pd.to_datetime(df[self.column]).dt.date).size().mean()
+        last_date = df[self.column].max()
+        last_date_count = len(df[df[self.column] == last_date])
+        percentage = (last_date_count / average) * 100
+        if percentage >= self.percent:
+            at_least = True
+        return {'average': average, 'last_date': last_date_count, 'percentage': percentage,
+                f'at_least_{self.percent}%': at_least}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col, to_date, mean as mean_, max as max_
+        at_least = False
+        df_to_date = df.select(to_date(col(self.column)).alias('date'))
+        average = df_to_date.groupby('date').count().select(mean_('count')).collect()[0][0]
+        last_date = df_to_date.select(max_('date')).collect()[0][0]
+        last_date_count = df_to_date.filter(col('date') == last_date).count()
+        percentage = (last_date_count / average) * 100
+        if percentage >= self.percent:
+            at_least = True
+        return {'average': average, 'last_date': last_date_count, 'percentage': percentage,
+                f'at_least_{self.percent}%': at_least}
+
+
+@dataclass
+class CountFewLastDayRows(Metric):
+    """
+    Calculate average number of rows per day in chosen date column.
+    For each of the last 'number' days, check if number of rows in the day
+    is at least 'percent' of the average.
+    """
+
+    column: str
+    percent: float = 80
+    number: int = 2
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        sorted_df = df.sort_values(by=self.column)
+        sorted_df[self.column] = pd.to_datetime(sorted_df[self.column])
+        rows_per_day = sorted_df.groupby(sorted_df[self.column].dt.date).size()
+        average = rows_per_day[:-self.number].mean()
+        k = ((rows_per_day[-self.number:] / average * 100) >= self.percent).sum()
+        return {'average': average, 'days': k}
+
+    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+        # TODO: add pyspark implementation of call method
+        raise NotImplementedError("This method is not implemented yet.")
+
+
+@dataclass
+class CheckAdversarialValidation(Metric):
+    """Apply adversarial validation technic.
+
+    Define indexes for first and second slices.
+    For given slices of data apply adversarial technic
+    to check if distributions of slices are the same or not.
+    If there is a doubt about first slice being
+    indistinguishable with the second slice,
+    then return False and list of column names
+    that might include some crucial differences.
+    Otherwise, if classification score is about 0.5, return True.
+
+    Take into consideration only numerical columns.
+    """
+
+    first_slice: tuple
+    second_slice: tuple
+    eps: float = 0.05
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        flag = True
+        importance_dict = {}
+
+        if len(self.first_slice) != 2 or len(self.second_slice) != 2:
+            raise ValueError("Slices must be length of 2.")
+        start_1, end_1 = self.first_slice[0], self.first_slice[1]
+        start_2, end_2 = self.second_slice[0], self.second_slice[1]
+        if start_1 >= end_1 or start_2 >= end_2:
+            raise ValueError("First value in slice must be lower than second value in slice.")
+
+        # make try except, if slices contain non-index values
+        first_part = df.select_dtypes(include=['number']).loc[start_1:end_1, :]
+        second_part = df.select_dtypes(include=['number']).loc[start_2:end_2, :]
+
+        first_part.insert(0, 'av_label', 0)
+        second_part.insert(0, 'av_label', 1)
+
+        data = pd.concat([first_part, second_part], axis=0)
+        shuffled_data = data.sample(frac=1)
+        shuffled_data = shuffled_data.fillna(np.min(shuffled_data.min()) - 1000)
+
+        X, y = shuffled_data.drop(['av_label'], axis=1), shuffled_data['av_label']
+
+        # cross validation, binary classifier
+        classifier = RandomForestClassifier(random_state=42)
+        scores = cross_val_score(classifier, X, y, cv=5, scoring='roc_auc')
+        mean_score = np.mean(scores)
+        if mean_score > 0.5 + self.eps:
+            flag = False
+            forest = RandomForestClassifier(random_state=42)
+            forest.fit(X, y)
+            importances = forest.feature_importances_
+            importance_dict = dict(zip(X.columns, importances))
+
+        return {"different": flag, "columns": importance_dict, "cv_roc_auc": mean_score}
+
+    def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
+        # TODO: add pyspark implementation of call method
+        raise NotImplementedError("This method is not implemented yet.")
