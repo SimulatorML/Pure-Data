@@ -612,3 +612,21 @@ class CheckAdversarialValidation(Metric):
     def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
         # TODO: add pyspark implementation of call method
         raise NotImplementedError("This method is not implemented yet.")
+
+
+
+if __name__ == "__main__":
+    df = pd.DataFrame(
+        [
+            ["2022-10-24", 100, np.nan, 120.0, 500.0],
+            ["2022-10-24", 100, np.nan, np.nan, 720.0],
+            ["2022-10-24", 200, 2, 200.0, 400.0],
+            ["2022-10-24", 300, 10, 85.0, 850.0],
+            ["2022-10-23", 100, 3, 110.0, 330.0],
+            ["2022-10-23", 200, 8, 200.0, 1600.0],
+            ["2022-10-23", 300, 0, 90.0, 0.0],
+        ],
+        columns=["day", "item_id", "qty", "price", "revenue"],
+    )
+    model = CountNull(columns=['qty', 'price'], aggregation='all')
+    print(model(df))
