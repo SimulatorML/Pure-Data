@@ -346,9 +346,11 @@ class CountGreaterValue(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col
+        from pyspark.sql.functions import col, isnan
 
         n = df.count()
+        mask = isnan(col(self.column)) | col(self.column).isNull()
+        df = df.filter(~mask)
         if self.strict:
             k = df.filter(col(self.column) > self.value).count()
         else:
@@ -614,19 +616,21 @@ class CheckAdversarialValidation(Metric):
         raise NotImplementedError("This method is not implemented yet.")
 
 
-
 if __name__ == "__main__":
     df = pd.DataFrame(
         [
-            ["2022-10-24", 100, np.nan, 120.0, 500.0],
-            ["2022-10-24", 100, np.nan, np.nan, 720.0],
-            ["2022-10-24", 200, 2, 200.0, 400.0],
-            ["2022-10-24", 300, 10, 85.0, 850.0],
-            ["2022-10-23", 100, 3, 110.0, 330.0],
-            ["2022-10-23", 200, 8, 200.0, 1600.0],
-            ["2022-10-23", 300, 0, 90.0, 0.0],
+            ["2022-09-24", 100, 1000, 219, 56],
+            ["2022-09-24", 200, 1248, 343, 1],
+            ["2022-09-24", 300, 993, 102, 71],
+            ["2022-09-23", 100, 3244, 730, 18],
+            ["2022-09-23", 200, 830, 203, 9],
+            ["2022-09-23", 300, 0, 0, 2],
+            ["2022-09-22", 100, 2130, 123, 20],
+            ["2022-09-22", 200, 5320, 500, 13],
+            ["2022-09-22", 300, 777, 68, 2],
         ],
-        columns=["day", "item_id", "qty", "price", "revenue"],
+        columns=["dt", "item_id", "views", "clicks", "payments"],
     )
-    model = CountNull(columns=['qty', 'price'], aggregation='all')
+    model = CountBelowValue('views', 1000, False)
+    print((df['views'] < 1000).sum())
     print(model(df))

@@ -84,10 +84,10 @@ def run_one_pandas_test(metric_name):
         )
         assert isinstance(metric_result, dict), msg
 
-        msg = (
-            f"Metric {metric_name} returns wrong value in case №{i + 1}."
-            f" Yours value: {metric_result}. Valid value: {expected_result}"
-        )
+        msg = ("Engine: pandas."
+               f" Metric {metric_name} returns wrong value in case №{i + 1}."
+               f" Yours value: {metric_result}. Valid value: {expected_result}"
+               )
         for key, value in metric_result.items():
             assert np.isclose(value, expected_result[key], rtol=1e-04), msg
 
@@ -116,10 +116,10 @@ def run_one_pyspark_test(metric_name):
         )
         assert isinstance(metric_result, dict), msg
 
-        msg = (
-            f"Metric {metric_name} returns wrong value in case №{i + 1}."
-            f" Yours value: {metric_result}. Valid value: {expected_result}"
-        )
+        msg = ("Engine: pyspark."
+               f" Metric {metric_name} returns wrong value in case №{i + 1}."
+               f" Yours value: {metric_result}. Valid value: {expected_result}"
+               )
         for key, value in metric_result.items():
             assert np.isclose(value, expected_result[key], rtol=1e-04), msg
 
@@ -142,3 +142,35 @@ def test_count_null():
 def test_count_duplicates():
     run_one_pandas_test("CountDuplicates")
     run_one_pyspark_test("CountDuplicates")
+
+
+def test_count_value():
+    run_one_pandas_test("CountValue")
+    run_one_pyspark_test("CountValue")
+
+
+def test_count_below_value():
+    run_one_pandas_test("CountBelowValue")
+    run_one_pyspark_test("CountBelowValue")
+
+
+def test_count_greater_value():
+    run_one_pandas_test("CountGreaterValue")
+    run_one_pyspark_test("CountGreaterValue")
+
+
+def test_count_below_column():
+    run_one_pandas_test("CountBelowColumn")
+    run_one_pyspark_test("CountBelowColumn")
+
+
+def test_count_ration_below():
+    run_one_pandas_test("CountRatioBelow")
+    run_one_pyspark_test("CountRatioBelow")
+
+
+def test_count_cb():
+    run_one_pandas_test("CountCB")
+    run_one_pyspark_test("CountCB")
+
+
