@@ -610,7 +610,5 @@ class CheckAdversarialValidation(Metric):
         return {"different": flag, "columns": importance_dict, "cv_roc_auc": mean_score}
 
     def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
-        flag = True
-        importance_dict = {}
-        mean_score = 0
-        return {"different": flag, "columns": importance_dict, "cv_roc_auc": mean_score}
+        # TODO: add pyspark implementation of call method
+        raise NotImplementedError("This method is not implemented yet.")
