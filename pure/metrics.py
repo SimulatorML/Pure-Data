@@ -543,24 +543,13 @@ class CountFewLastDayRows(Metric):
         sorted_df = df.sort_values(by=self.column)
         sorted_df[self.column] = pd.to_datetime(sorted_df[self.column])
         rows_per_day = sorted_df.groupby(sorted_df[self.column].dt.date).size()
-        average = rows_per_day.mean()
+        average = rows_per_day[:-self.number].mean()
         k = ((rows_per_day[-self.number:] / average * 100) >= self.percent).sum()
         return {'average': average, 'days': k}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, to_date, mean as mean_
-
-        df_to_date = df.select(to_date(col(self.column)).alias('date'))
-        rows_per_day = df_to_date.groupby(df_to_date.date).count().sort(col('date'))
-
-        last_days = rows_per_day.tail(self.number)
-        spark = ps.SparkSession.builder.appName("pandas to spark").getOrCreate()
-        last_days_df = spark.createDataFrame(last_days)
-
-        average = rows_per_day.select(mean_('count')).collect()[0][0]
-        k = last_days_df.filter(col('count') / average * 100 >= self.percent).count()
-
-        return {'average': average, 'days': k}
+        # TODO: add pyspark implementation of call method
+        raise NotImplementedError("This method is not implemented yet.")
 
 
 @dataclass
