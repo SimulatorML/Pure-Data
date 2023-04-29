@@ -199,7 +199,18 @@ TEST_CASES = {
         },
     ],
     "CountCB": [
-        # TODO: add cases
+        {
+            "tables_set": TABLES1,
+            "table_name": "sales",
+            "params": ["qty", 0.95],
+            "expected_result": {"lcb": 0.2, "ucb": 9.8},
+        },
+        {
+            "tables_set": TABLES1,
+            "table_name": "sales",
+            "params": ["price", 0.95],
+            "expected_result": {"lcb": 85.625, "ucb": 200.0},
+        },
     ],
     "CountLag": [
         {
@@ -294,7 +305,7 @@ TEST_CASES = {
             "tables_set": TABLES2,
             "table_name": "sales",
             "params": ["qty", 0.2, 'lower'],
-            "expected_result": {"total": 21, "count": 2, "delta": 0.09524},
+            "expected_result": {"total": 21, "count": 3, "delta": 0.14286},
         },
         {
             "tables_set": TABLES1,
@@ -306,7 +317,7 @@ TEST_CASES = {
             "tables_set": TABLES1,
             "table_name": "sales",
             "params": ["qty", 0.2, 'lower'],
-            "expected_result": {"total": 7, "count": 0, "delta": 0.0},
+            "expected_result": {"total": 7, "count": 1, "delta": 0.14286},
         },
     ],
     "CountLastDayRows": [

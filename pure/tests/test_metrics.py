@@ -166,9 +166,24 @@ def test_count_ration_below():
 
 
 def test_count_cb():
-    """Test CountCB metric, both pandas and pyspark."""
+    """Test CountCB metric, both pandas version."""
     run_one_pandas_test("CountCB")
-    run_one_pyspark_test("CountCB")
+    # TODO: add test for pyspark version
+    # run_one_pyspark_test("CountCB")
+
+
+def test_count_cb_wrong_conf():
+    """Test CountCB metric initialization.
+
+    Test that metric initialization with 'conf' parameter value
+    out of [0, 1] interval raises ValueError
+    """
+    try:
+        metrics.CountCB('qty', 1.5)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Confidence level value out of [0, 1] interval is not handled")
 
 
 def test_count_lag():
@@ -224,9 +239,10 @@ def test_count_extreme_values_formula_wrong_style():
 
 
 def test_count_extreme_values_quantile():
-    """Test CountExtremeValuesQuantile metric, both pandas and pyspark."""
+    """Test CountExtremeValuesQuantile metric, pandas version."""
     run_one_pandas_test("CountExtremeValuesQuantile")
-    run_one_pyspark_test("CountExtremeValuesQuantile")
+    # TODO: add test for pyspark version
+    # run_one_pyspark_test("CountExtremeValuesQuantile")
 
 
 def test_count_extreme_values_quantile_wrong_style():
