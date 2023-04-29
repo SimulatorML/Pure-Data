@@ -62,7 +62,7 @@ class CountZeros(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, count
+        from pyspark.sql.functions import col
 
         n = df.count()
         k = df.filter(col(self.column) == 0).count()
@@ -81,6 +81,10 @@ class CountNull(Metric):
 
     columns: List[str]
     aggregation: str = "any"  # either "all", or "any"
+
+    def __post_init__(self):
+        if self.aggregation not in ['all', 'any']:
+            raise ValueError("Aggregation must be either 'all' or 'any'.")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -217,7 +221,7 @@ class CountBelowColumn(Metric):
 
         mask = isnan(col(self.column_x)) | col(self.column_x).isNull()
         mask |= isnan(col(self.column_y)) | col(self.column_y).isNull()
-        df = df.filter(~(mask))
+        df = df.filter(~mask)
 
         if self.strict:
             k = df.filter(col(self.column_x) < col(self.column_y)).count()
@@ -276,6 +280,10 @@ class CountCB(Metric):
 
     column: str
     conf: float = 0.95
+
+    def __post_init__(self):
+        if not 0 <= self.conf <= 1:
+            raise ValueError("Confident leven should be in the interval [0, 1]")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         alpha = 1 - self.conf
@@ -395,6 +403,10 @@ class CountValueInBounds(Metric):
     upper_bound: float
     strict: bool = False
 
+    def __post_init__(self):
+        if self.lower_bound > self.upper_bound:
+            raise ValueError("Lower bound must be lower than upper bound.")
+
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         if self.strict:
@@ -426,8 +438,10 @@ class CountExtremeValuesFormula(Metric):
     column: str
     std_coef: int
     style: str = "greater"
-    if style not in ['greater', 'lower']:
-        raise ValueError("Style must be either 'greater' or 'lower'.")
+
+    def __post_init__(self):
+        if self.style not in ['greater', 'lower']:
+            raise ValueError("Style must be either 'greater' or 'lower'.")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -462,7 +476,7 @@ class CountExtremeValuesFormula(Metric):
 class CountExtremeValuesQuantile(Metric):
     """Number of extreme values calculated with quantile.
 
-    Calculate quantile in chosen column.
+    Calculate quantile in chosen column using lower interpolation style.
     If style == 'greater', then count values in 'column' that are greater than
     calculated quantile. Otherwise, if style == 'lower', count values that are lower
     than calculated quantile.
@@ -471,14 +485,16 @@ class CountExtremeValuesQuantile(Metric):
     column: str
     q: float = 0.8
     style: str = 'greater'
-    if style not in ['greater', 'lower']:
-        raise ValueError("Style must be either 'greater' or 'lower'.")
-    if not 0 <= q <= 1:
-        raise ValueError("Quantile should be in the interval [0, 1]")
+
+    def __post_init__(self):
+        if self.style not in ['greater', 'lower']:
+            raise ValueError("Style must be either 'greater' or 'lower'.")
+        if not 0 <= self.q <= 1:
+            raise ValueError("Quantile should be in the interval [0, 1]")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        quantile_value = df[self.column].quantile(self.q, interpolation='higher')
+        quantile_value = df[self.column].quantile(self.q, interpolation='lower')
         if self.style == 'greater':
             k = (df[self.column] > quantile_value).sum()
         else:
@@ -514,28 +530,36 @@ class CountLastDayRows(Metric):
     column: str
     percent: float = 80
 
+    def __post_init__(self):
+        if self.percent < 0:
+            raise ValueError("Percent value should be greater than 0.")
+
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         at_least = False
-        average = df.groupby(pd.to_datetime(df[self.column]).dt.date).size().mean()
         last_date = df[self.column].max()
         last_date_count = len(df[df[self.column] == last_date])
+        df_without_last = df[df[self.column] != last_date]
+        day_groups = df_without_last.groupby(pd.to_datetime(df_without_last[self.column]).dt.date)
+        average = day_groups.size().mean()
+
         percentage = (last_date_count / average) * 100
         if percentage >= self.percent:
             at_least = True
-        return {'average': average, 'last_date': last_date_count, 'percentage': percentage,
+        return {'average': average, 'last_date_count': last_date_count, 'percentage': percentage,
                 f'at_least_{self.percent}%': at_least}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         from pyspark.sql.functions import col, to_date, mean as mean_, max as max_
         at_least = False
         df_to_date = df.select(to_date(col(self.column)).alias('date'))
-        average = df_to_date.groupby('date').count().select(mean_('count')).collect()[0][0]
         last_date = df_to_date.select(max_('date')).collect()[0][0]
         last_date_count = df_to_date.filter(col('date') == last_date).count()
+        df_without_last = df_to_date.filter(col('date') != last_date)
+        average = df_without_last.groupby('date').count().select(mean_('count')).collect()[0][0]
         percentage = (last_date_count / average) * 100
         if percentage >= self.percent:
             at_least = True
-        return {'average': average, 'last_date': last_date_count, 'percentage': percentage,
+        return {'average': average, 'last_date_count': last_date_count, 'percentage': percentage,
                 f'at_least_{self.percent}%': at_least}
 
 
@@ -551,7 +575,16 @@ class CountFewLastDayRows(Metric):
     percent: float = 80
     number: int = 2
 
+    def __post_init__(self):
+        if self.percent < 0:
+            raise ValueError("Percent value should be greater than 0.")
+        if self.number <= 0:
+            raise ValueError("Number of days to  check should be greater than 0.")
+
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        if self.number >= len(np.unique(df[self.column])):
+            raise ValueError("Number of days to check is greater or equal than total number of days.")
+
         sorted_df = df.sort_values(by=self.column)
         sorted_df[self.column] = pd.to_datetime(sorted_df[self.column])
         rows_per_day = sorted_df.groupby(sorted_df[self.column].dt.date).size()
