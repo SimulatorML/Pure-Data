@@ -469,14 +469,16 @@ class CountExtremeValuesQuantile(Metric):
     """
 
     column: str
-    quantile: float
+    q: float = 0.8
     style: str = 'greater'
     if style not in ['greater', 'lower']:
         raise ValueError("Style must be either 'greater' or 'lower'.")
+    if not 0 <= q <= 1:
+        raise ValueError("Quantile should be in the interval [0, 1]")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        quantile_value = df[self.column].quantile(self.quantile, interpolation='higher')
+        quantile_value = df[self.column].quantile(self.q, interpolation='higher')
         if self.style == 'greater':
             k = (df[self.column] > quantile_value).sum()
         else:
@@ -492,7 +494,7 @@ class CountExtremeValuesQuantile(Metric):
         df = df.filter(~mask)
 
         st = DataFrameStatFunctions(df)
-        quantile_value = st.approxQuantile(self.column, [self.quantile], 0)[0]
+        quantile_value = st.approxQuantile(self.column, [self.q], 0)[0]
         if self.style == 'greater':
             k = df.filter(col(self.column) > quantile_value).count()
         else:
