@@ -485,8 +485,12 @@ class CountExtremeValuesQuantile(Metric):
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         from pyspark.sql import DataFrameStatFunctions
-        from pyspark.sql.functions import col
+        from pyspark.sql.functions import col, isnan
         n = df.count()
+
+        mask = isnan(col(self.column)) | col(self.column).isNull()
+        df = df.filter(~mask)
+
         st = DataFrameStatFunctions(df)
         quantile_value = st.approxQuantile(self.column, [self.quantile], 0)[0]
         if self.style == 'greater':
