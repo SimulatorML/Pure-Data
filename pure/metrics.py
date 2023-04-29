@@ -382,34 +382,34 @@ class CountValueInRequiredSet(Metric):
 
 
 @dataclass
-class CountValueOutOfBounds(Metric):
-    """Number of values out of available bounds.
+class CountValueInBounds(Metric):
+    """Number of values that are inside available bounds.
 
-    Count values in chosen column that do not satisfy defined bounds:
-    they are lower than 'low_bound' or greater than 'upper_bound'.
+    Count values in chosen column that do satisfy defined bounds:
+    they are greater than 'lower_bound' or lower than 'upper_bound'.
     If 'strict' is False, then inequalities are non-strict.
     """
 
     column: str
-    low_bound: float
+    lower_bound: float
     upper_bound: float
     strict: bool = False
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         if self.strict:
-            k = ((df[self.column] > self.upper_bound) | (df[self.column] < self.low_bound)).sum()
+            k = ((df[self.column] < self.upper_bound) & (df[self.column] > self.lower_bound)).sum()
         else:
-            k = ((df[self.column] > self.upper_bound) | (df[self.column] <= self.low_bound)).sum()
+            k = ((df[self.column] <= self.upper_bound) & (df[self.column] >= self.lower_bound)).sum()
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         from pyspark.sql.functions import col
         n = df.count()
         if self.strict:
-            k = df.filter((col(self.column) > self.upper_bound) | (col(self.column) < self.low_bound)).count()
+            k = df.filter((col(self.column) < self.upper_bound) & (col(self.column) > self.lower_bound)).count()
         else:
-            k = df.filter((col(self.column) >= self.upper_bound) | (col(self.column) <= self.low_bound)).count()
+            k = df.filter((col(self.column) <= self.upper_bound) & (col(self.column) >= self.lower_bound)).count()
         return {"total": n, "count": k, "delta": k / n}
 
 
