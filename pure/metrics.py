@@ -476,7 +476,7 @@ class CountExtremeValuesFormula(Metric):
 class CountExtremeValuesQuantile(Metric):
     """Number of extreme values calculated with quantile.
 
-    Calculate quantile in chosen column using lower interpolation style.
+    Calculate quantile in chosen column.
     If style == 'greater', then count values in 'column' that are greater than
     calculated quantile. Otherwise, if style == 'lower', count values that are lower
     than calculated quantile.
@@ -494,7 +494,7 @@ class CountExtremeValuesQuantile(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        quantile_value = df[self.column].quantile(self.q, interpolation='lower')
+        quantile_value = df[self.column].quantile(self.q)
         if self.style == 'greater':
             k = (df[self.column] > quantile_value).sum()
         else:
