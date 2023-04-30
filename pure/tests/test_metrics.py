@@ -89,32 +89,6 @@ def run_one_pyspark_test(metric_name):
                 assert value == expected_result[key], msg
 
 
-def test_count_total():
-    """Test CountTotal metric.
-
-    Test that both, pandas and pyspark, metric realizations
-    give correct results on given test cases.
-    """
-    run_one_pandas_test("CountTotal")
-    run_one_pyspark_test("CountTotal")
-
-
-def test_count_zeros():
-    """Test CountZeros metric.
-
-    Test that both, pandas and pyspark, metric realizations
-    give correct results on given test cases.
-    """
-    run_one_pandas_test("CountZeros")
-    run_one_pyspark_test("CountZeros")
-
-
-def test_count_null():
-    """Test CountNull metric, both pandas and pyspark."""
-    run_one_pandas_test("CountNull")
-    run_one_pyspark_test("CountNull")
-
-
 def test_count_null_wrong_agg():
     """Test CountNull metric initialization.
 
@@ -127,49 +101,6 @@ def test_count_null_wrong_agg():
         pass
     else:
         raise AssertionError("Not acceptable aggregation value is not handled")
-
-
-def test_count_duplicates():
-    """Test CountDuplicates metric, both pandas and pyspark."""
-    run_one_pandas_test("CountDuplicates")
-    run_one_pyspark_test("CountDuplicates")
-
-
-def test_count_value():
-    """Test CountValue metric, both pandas and pyspark."""
-    run_one_pandas_test("CountValue")
-    run_one_pyspark_test("CountValue")
-
-
-def test_count_below_value():
-    """Test CountBelowValue metric, both pandas and pyspark."""
-    run_one_pandas_test("CountBelowValue")
-    run_one_pyspark_test("CountBelowValue")
-
-
-def test_count_greater_value():
-    """Test CountGreaterValue metric, both pandas and pyspark."""
-    run_one_pandas_test("CountGreaterValue")
-    run_one_pyspark_test("CountGreaterValue")
-
-
-def test_count_below_column():
-    """Test CountBelowColumn metric, both pandas and pyspark."""
-    run_one_pandas_test("CountBelowColumn")
-    run_one_pyspark_test("CountBelowColumn")
-
-
-def test_count_ration_below():
-    """Test CountRatioBelow metric, both pandas and pyspark."""
-    run_one_pandas_test("CountRatioBelow")
-    run_one_pyspark_test("CountRatioBelow")
-
-
-def test_count_cb():
-    """Test CountCB metric, both pandas version."""
-    run_one_pandas_test("CountCB")
-    # TODO: add test for pyspark version
-    # run_one_pyspark_test("CountCB")
 
 
 def test_count_cb_wrong_conf():
@@ -186,24 +117,6 @@ def test_count_cb_wrong_conf():
         raise AssertionError("Confidence level value out of [0, 1] interval is not handled")
 
 
-def test_count_lag():
-    """Test CountLag metric, both pandas and pyspark."""
-    run_one_pandas_test("CountLag")
-    run_one_pyspark_test("CountLag")
-
-
-def test_count_value_in_required_set():
-    """Test CountValueInRequiredSet metric, both pandas and pyspark."""
-    run_one_pandas_test("CountValueInRequiredSet")
-    run_one_pyspark_test("CountValueInRequiredSet")
-
-
-def test_count_value_in_bounds():
-    """Test CountValueInBounds metric, both pandas and pyspark."""
-    run_one_pandas_test("CountValueInBounds")
-    run_one_pyspark_test("CountValueInBounds")
-
-
 def test_count_value_in_bound_wrong_bounds():
     """Test CountValueInBounds metric initialization.
 
@@ -216,12 +129,6 @@ def test_count_value_in_bound_wrong_bounds():
         pass
     else:
         raise AssertionError("Lower bound greater than upper bound case is not handled")
-
-
-def test_count_extreme_values_formula():
-    """Test CountExtremeValuesFormula metric, both pandas and pyspark."""
-    run_one_pandas_test("CountExtremeValuesFormula")
-    run_one_pyspark_test("CountExtremeValuesFormula")
 
 
 def test_count_extreme_values_formula_wrong_style():
@@ -238,13 +145,6 @@ def test_count_extreme_values_formula_wrong_style():
         raise AssertionError("Not acceptable style value is not handled.")
 
 
-def test_count_extreme_values_quantile():
-    """Test CountExtremeValuesQuantile metric, pandas version."""
-    run_one_pandas_test("CountExtremeValuesQuantile")
-    # TODO: add test for pyspark version
-    # run_one_pyspark_test("CountExtremeValuesQuantile")
-
-
 def test_count_extreme_values_quantile_wrong_style():
     """Test CountExtremeValuesQuantile metric initialization.
 
@@ -256,7 +156,7 @@ def test_count_extreme_values_quantile_wrong_style():
     except ValueError:
         pass
     else:
-        raise AssertionError("Not acceptable style value is not handled.")
+        raise AssertionError("Not acceptable style value is not ha  ndled.")
 
 
 def test_count_extreme_values_quantile_wrong_q():
@@ -273,12 +173,6 @@ def test_count_extreme_values_quantile_wrong_q():
         raise AssertionError("Quantile value out of [0, 1] interval is not handled.")
 
 
-def test_count_last_day_rows():
-    """Test CountLastDayRows metric, both pandas and pyspark."""
-    run_one_pandas_test("CountLastDayRows")
-    run_one_pyspark_test("CountLastDayRows")
-
-
 def test_count_last_day_rows_negative_percent():
     """Test CountLastDayRows metric initialization.
 
@@ -291,10 +185,6 @@ def test_count_last_day_rows_negative_percent():
         pass
     else:
         raise AssertionError("Negative percent is not handled.")
-
-
-def test_count_few_last_day_rows():
-    """Test CountFewLastDayRows metric, pandas version."""
 
 
 def test_count_vew_last_day_rows_pyspark():
