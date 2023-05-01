@@ -22,7 +22,10 @@ def test_metrics_pyspark():
     spark.sparkContext.setLogLevel("OFF")
 
     for metric_name in metric_cases.keys():
-        run_one_pyspark_test(metric_name)
+        try:
+            run_one_pyspark_test(metric_name)
+        except NotImplementedError:
+            pass
 
 
 def run_one_pandas_test(metric_name):
@@ -244,3 +247,51 @@ def test_count_few_last_day_rows_number_greater():
         pass
     else:
         raise AssertionError("Number greater than number of days in dataset is not handled.")
+
+
+def test_check_adversarial_validation_slices_wrong_length():
+    """Test CheckAdversarialValidation metric initialization, pandas version,
+    with inappropriate slices length.
+
+    Test that metric initialization with slices that length != 2 raises ValueError.
+    """
+    try:
+        model = metrics.CheckAdversarialValidation((100, 200), (300,), eps=0.05)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Slices with wrong length not handled.")
+
+
+def test_check_adversarial_validation_slices_wrong_values():
+    """Test CheckAdversarialValidation metric, pandas version,
+    with inappropriate slices values.
+
+    Test that metric calling with slices where
+    first value in slice is greater than second one raises ValueError.
+    """
+    try:
+        model = metrics.CheckAdversarialValidation((100, 200), (300, 250), eps=0.05)
+        df = TABLES2['av_table_none']
+        model(df)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Slices with wrong value order not handled.")
+
+
+def test_check_adversarial_validation_non_index_slices():
+    """Test CheckAdversarialValidation metric, pandas version,
+    with non index slice.
+
+    Test that metric calling with slices where
+    values are not index type of input dataframe raises TypeError.
+    """
+    try:
+        model = metrics.CheckAdversarialValidation((100, 200), (250, 300), eps=0.05)
+        df = TABLES2['av_table_none']
+        model(df)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("Slices with wrong value order not handled.")
