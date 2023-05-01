@@ -16,11 +16,6 @@ def test_metrics_pandas():
 
 def test_metrics_pyspark():
     """Test pyspark engine metrics."""
-    spark = (
-        SparkSession.builder.master("local").appName("spark_test").getOrCreate()
-    )
-    spark.sparkContext.setLogLevel("OFF")
-
     for metric_name in metric_cases.keys():
         try:
             run_one_pyspark_test(metric_name)
