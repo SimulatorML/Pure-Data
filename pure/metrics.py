@@ -618,6 +618,7 @@ class CheckAdversarialValidation(Metric):
     eps: float = 0.05
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        np.random.seed(42)
         flag = True
         importance_dict = {}
 
@@ -628,31 +629,32 @@ class CheckAdversarialValidation(Metric):
         if start_1 >= end_1 or start_2 >= end_2:
             raise ValueError("First value in slice must be lower than second value in slice.")
 
-        # make try except, if slices contain non-index values
-        first_part = df.select_dtypes(include=['number']).loc[start_1:end_1, :]
-        second_part = df.select_dtypes(include=['number']).loc[start_2:end_2, :]
+        # try except: slices contain index values
+        try:
+            first_part = df.select_dtypes(include=['number']).loc[start_1:end_1, :]
+            second_part = df.select_dtypes(include=['number']).loc[start_2:end_2, :]
+            first_part.insert(0, 'av_label', 0)
+            second_part.insert(0, 'av_label', 1)
 
-        first_part.insert(0, 'av_label', 0)
-        second_part.insert(0, 'av_label', 1)
+            data = pd.concat([first_part, second_part], axis=0)
+            shuffled_data = data.sample(frac=1)
+            shuffled_data = shuffled_data.fillna(np.min(shuffled_data.min()) - 1000)
 
-        data = pd.concat([first_part, second_part], axis=0)
-        shuffled_data = data.sample(frac=1)
-        shuffled_data = shuffled_data.fillna(np.min(shuffled_data.min()) - 1000)
+            X, y = shuffled_data.drop(['av_label'], axis=1), shuffled_data['av_label']
 
-        X, y = shuffled_data.drop(['av_label'], axis=1), shuffled_data['av_label']
-
-        # cross validation, binary classifier
-        classifier = RandomForestClassifier(random_state=42)
-        scores = cross_val_score(classifier, X, y, cv=5, scoring='roc_auc')
-        mean_score = np.mean(scores)
-        if mean_score > 0.5 + self.eps:
-            flag = False
-            forest = RandomForestClassifier(random_state=42)
-            forest.fit(X, y)
-            importances = forest.feature_importances_
-            importance_dict = dict(zip(X.columns, importances))
-
-        return {"different": flag, "columns": importance_dict, "cv_roc_auc": mean_score}
+            # cross validation, binary classifier
+            classifier = RandomForestClassifier(random_state=42)
+            scores = cross_val_score(classifier, X, y, cv=5, scoring='roc_auc')
+            mean_score = np.mean(scores)
+            if mean_score > 0.5 + self.eps:
+                flag = False
+                forest = RandomForestClassifier(random_state=42)
+                forest.fit(X, y)
+                importances = np.around(forest.feature_importances_, 5)
+                importance_dict = dict(zip(X.columns, importances))
+            return {"similar": flag, "importances": importance_dict, "cv_roc_auc": np.around(mean_score, 5)}
+        except TypeError:
+            print("Values in slices should be values from df.index .")
 
     def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
         # TODO: add pyspark implementation of call method
