@@ -657,6 +657,7 @@ class CheckAdversarialValidation(Metric):
             return {"similar": flag, "importances": importance_dict, "cv_roc_auc": np.around(mean_score, 5)}
         except TypeError:
             print("Values in slices should be values from df.index .")
+            raise
 
     def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
         # TODO: add pyspark implementation of call method
