@@ -375,7 +375,7 @@ class CountValueInRequiredSet(Metric):
     """
 
     column: str
-    required_set: set
+    required_set: List
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)

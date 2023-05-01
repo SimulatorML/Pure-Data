@@ -232,13 +232,13 @@ TEST_CASES = {
         {
             "tables_set": TABLES1,
             "table_name": "sales",
-            "params": ["pay_card", {"visa", "mastercard"}],
+            "params": ["pay_card", ["visa", "mastercard"]],
             "expected_result": {"total": 7, "count": 4, "delta": 0.57142},
         },
         {
             "tables_set": TABLES2,
             "table_name": "sales",
-            "params": ["pay_card", {"visa", "mastercard", "мир"}],
+            "params": ["pay_card", ["visa", "mastercard", "мир"]],
             "expected_result": {"total": 21, "count": 16, "delta": 0.76190},
         },
     ],
