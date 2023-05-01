@@ -31,8 +31,7 @@ def test_report_pandas():
 
         # order in report and order in checklist should match
         assert correct_order == result_order
-
-        assert_report_equals(expected_result["result"], result["result"])
+        assert_report_equals(result["result"], expected_result["result"])
 
         keys_to_check = list(result.keys())
         keys_to_check.remove("result")
