@@ -617,13 +617,15 @@ class CheckAdversarialValidation(Metric):
     second_slice: tuple
     eps: float = 0.05
 
+    def __post_init__(self):
+        if len(self.first_slice) != 2 or len(self.second_slice) != 2:
+            raise ValueError("Slices must be length of 2.")
+
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         np.random.seed(42)
         flag = True
         importance_dict = {}
 
-        if len(self.first_slice) != 2 or len(self.second_slice) != 2:
-            raise ValueError("Slices must be length of 2.")
         start_1, end_1 = self.first_slice[0], self.first_slice[1]
         start_2, end_2 = self.second_slice[0], self.second_slice[1]
         if start_1 >= end_1 or start_2 >= end_2:
