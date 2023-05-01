@@ -23,7 +23,6 @@ def test_report_pandas():
 
         expected_result = pickle.load(open(dump_file, "rb"))
         result = Report(checklist).fit(tables_set)
-
         correct_order = [(row[0], str(row[1])) for row in checklist]
         result_order = [
             (row[1]["table_name"], row[1]["metric"])
