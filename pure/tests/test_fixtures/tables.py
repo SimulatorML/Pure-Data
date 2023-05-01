@@ -2,8 +2,23 @@
 
 import numpy as np
 import pandas as pd
+import os
+import pickle
 
 values = np.arange(100, 1000, 2)
+
+dir = os.path.abspath(os.path.dirname(__file__))
+dumps_path = os.path.join(dir, "metrics_dumps")
+dump_big_table_1 = os.path.join(dumps_path, "big_table_1.pkl")
+dump_big_table_2 = os.path.join(dumps_path, "big_table_2.pkl")
+dump_av_table_shift = os.path.join(dumps_path, "av_table_shift.pkl")
+dump_av_table_none = os.path.join(dumps_path, "av_table_none.pkl")
+
+
+big_table_1 = pickle.load(open(dump_big_table_1, "rb"))
+big_table_2 = pickle.load(open(dump_big_table_2, "rb"))
+av_table_shift = pickle.load(open(dump_av_table_shift, "rb"))
+av_table_none = pickle.load(open(dump_av_table_none, "rb"))
 
 TABLES1 = {
     # Table with transactions
@@ -35,9 +50,7 @@ TABLES1 = {
         columns=["dt", "item_id", "views", "clicks", "payments"],
     ),
     # Table 10_000 samples
-    "big_table": pd.DataFrame(
-        np.random.choice(values, size=10_000, replace=True), columns=["revenue"]
-    ),
+    "big_table": big_table_1,
     "two_years": pd.DataFrame(
         [
             ["2022-09-24", 100, 1000, 219, 56],
@@ -52,6 +65,7 @@ TABLES1 = {
         ],
         columns=["dt", "item_id", "views", "clicks", "payments"],
     ),
+    "av_table_shift": av_table_shift,
 }
 
 TABLES2 = {
@@ -107,7 +121,7 @@ TABLES2 = {
         columns=["dt", "item_id", "views", "clicks", "payments"],
     ),
     # Table 10_000 samples
-    "big_table": pd.DataFrame(
-        np.random.choice(values, size=10_000, replace=True), columns=["revenue"]
-    ),
+    "big_table": big_table_2,
+    "av_table_none": av_table_none
 }
+
