@@ -8,6 +8,10 @@ from pure.report import Report
 
 
 def test_report_pandas():
+    """Test Report.
+
+    Check on simple examples that Report returns result equal to the expected one.
+    """
 
     dir = os.path.abspath(os.path.dirname(__file__))
     dumps_path = os.path.join(dir, "test_fixtures", "report_dumps")
@@ -18,7 +22,6 @@ def test_report_pandas():
         dump_file = os.path.join(dumps_path, case["expected_result_dump_file"])
 
         expected_result = pickle.load(open(dump_file, "rb"))
-
         result = Report(checklist).fit(tables_set)
 
         correct_order = [(row[0], str(row[1])) for row in checklist]
@@ -27,25 +30,16 @@ def test_report_pandas():
             for row in result["result"].iterrows()
         ]
 
-        msg = (
-            "Wrong order of metrics in result. "
-            "Order should be the same as in checklist. "
-            f"Expected order: {correct_order}. "
-            f"Yours order: {result_order}."
-        )
-        assert correct_order == result_order, msg
+        # order in report and order in checklist should match
+        assert correct_order == result_order
 
         assert_report_equals(expected_result["result"], result["result"])
 
         keys_to_check = list(result.keys())
         keys_to_check.remove("result")
         for key in keys_to_check:
-            msg = (
-                "Method fit() return wrong result. "
-                f'For key "{key}" expected value: {result[key]}. '
-                f"Yours value: {result[key]}"
-            )
-            assert result[key] == result[key], msg
+            # check that values in report (except metric results) are equal
+            assert expected_result[key] == result[key]
 
 
 def assert_report_equals(user_report: pd.DataFrame, valid_report: pd.DataFrame) -> None:
@@ -65,31 +59,23 @@ def assert_report_equals(user_report: pd.DataFrame, valid_report: pd.DataFrame) 
 
     """
 
-    msg = (
-        "Shapes of yours report dataframe is wrong. "
-        f"Yours shape: {user_report.shape} Valid shape: {valid_report.shape}"
-    )
-    assert user_report.shape == valid_report.shape, msg
+    # shapes of report should be the same
+    assert user_report.shape == valid_report.shape
 
     for (_, user), (_, valid) in zip(user_report.iterrows(), valid_report.iterrows()):
+        # keys (columns in report) are expected to match
+        assert set(user.keys()) == set(valid.keys())
 
-        msg = (
-            "Reports's structure is wrong. Report should contain columns: "
-            f"{list(valid.keys())} Yours columns: {list(user.keys())}"
-        )
-        assert set(user.keys()) == set(valid.keys()), msg
-
-        msg = f"Reports's line is wrong. Expected: {valid}. Got: {user}"
+        # check that metric result values in report are equal
         for key in valid.keys():
             if key == "values":
-                assert metric_results_are_equal(user[key], valid[key]), msg
+                assert metric_results_are_equal(user[key], valid[key])
                 continue
-
-            assert user[key] == valid[key], msg
+            assert user[key] == valid[key]
 
 
 def metric_results_are_equal(
-    user_result: dict, valid_result: dict, error_rate: float = 0.01
+        user_result: dict, valid_result: dict, error_rate: float = 0.01
 ) -> bool:
     """Check that user's result equals valid result.
     For float values checks non-strict equality within error
@@ -113,7 +99,6 @@ def metric_results_are_equal(
 
     for key, value in valid_result.items():
         user_value = user_result[key]
-
         if isinstance(value, float) and value != 0:
             if abs(value - user_value) / value > error_rate:
                 return False
