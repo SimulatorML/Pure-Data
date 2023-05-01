@@ -1,7 +1,7 @@
 test:
 	clear
-	python -m pytest -vv
+	python3 -m pytest -vv
 
 onetest:
 	clear
-	python -m pytest pure/tests/test_metrics.py::test_pandas_count_zeros
+	python3 -m pytest pure/tests/test_metrics.py::test_metrics_pyspark
