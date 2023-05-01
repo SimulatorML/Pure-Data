@@ -201,16 +201,16 @@ TEST_CASES = {
     "CountCB": [
         {
             "tables_set": TABLES1,
-            "table_name": "sales",
-            "params": ["qty", 0.95],
-            "expected_result": {"lcb": 0.2, "ucb": 9.8},
+            "table_name": "big_table",
+            "params": ["revenue", 0.95],
+            "expected_result": {"lcb": 120.0, "ucb": 978.0},
         },
         {
-            "tables_set": TABLES1,
-            "table_name": "sales",
-            "params": ["price", 0.95],
-            "expected_result": {"lcb": 85.625, "ucb": 200.0},
-        },
+            "tables_set": TABLES2,
+            "table_name": "big_table",
+            "params": ["revenue", 0.8],
+            "expected_result": {"lcb": 190.0, "ucb": 912.0},
+        }
     ],
     "CountLag": [
         {
@@ -296,29 +296,17 @@ TEST_CASES = {
     ],
     "CountExtremeValuesQuantile": [
         {
-            "tables_set": TABLES2,
-            "table_name": "sales",
-            "params": ["qty", 0.8, 'greater'],
-            "expected_result": {"total": 21, "count": 2, "delta": 0.09524},
-        },
-        {
-            "tables_set": TABLES2,
-            "table_name": "sales",
-            "params": ["qty", 0.2, 'lower'],
-            "expected_result": {"total": 21, "count": 3, "delta": 0.14286},
-        },
-        {
             "tables_set": TABLES1,
-            "table_name": "sales",
-            "params": ["qty", 0.8, 'greater'],
-            "expected_result": {"total": 7, "count": 1, "delta": 0.14286},
+            "table_name": "big_table",
+            "params": ["revenue", 0.9, "greater"],
+            "expected_result": {"total": 10000, "count": 991, "delta": 0.0991},
         },
         {
-            "tables_set": TABLES1,
-            "table_name": "sales",
-            "params": ["qty", 0.2, 'lower'],
-            "expected_result": {"total": 7, "count": 1, "delta": 0.14286},
-        },
+            "tables_set": TABLES2,
+            "table_name": "big_table",
+            "params": ["revenue", 0.05, "lower"],
+            "expected_result": {"total": 10000, "count": 489, "delta": 0.0489},
+        }
     ],
     "CountLastDayRows": [
         {
@@ -376,7 +364,28 @@ TEST_CASES = {
             "expected_result": {'average': 1.33333, 'days': 2},
         },
     ],
-    "CheckAdversarialValidation":[
-        # TODO: add cases
+    "CheckAdversarialValidation": [
+        {
+            "tables_set": TABLES1,
+            "table_name": "av_table_shift",
+            "params": [
+                (dt.date(2022, 4, 17), dt.date(2022, 5, 3)),
+                (dt.date(2022, 5, 3), dt.date(2022, 5, 17)),
+                0.05
+            ],
+            "expected_result": {"similar": False, "importances": {'revenue': 0.6597, 'qty': 0.3403},
+                                'cv_roc_auc': 0.64578}
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "av_table_none",
+            "params": [
+                (dt.date(2022, 4, 17), dt.date(2022, 5, 3)),
+                (dt.date(2022, 5, 3), dt.date(2022, 5, 17)),
+                0.05
+            ],
+            "expected_result": {"similar": False, "importances": {'revenue': 0.72474, 'qty': 0.27526},
+                                'cv_roc_auc': 0.70727}
+        }
     ]
 }
