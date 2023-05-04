@@ -238,7 +238,7 @@ TEST_CASES = {
         {
             "tables_set": TABLES2,
             "table_name": "sales",
-            "params": ["pay_card", ["visa", "mastercard", "мир"]],
+            "params": ["pay_card", ["visa", "mastercard", "unionpay"]],
             "expected_result": {"total": 21, "count": 16, "delta": 0.76190},
         },
     ],
