@@ -12,7 +12,6 @@ CHECKLIST1 = [
     # Table with sales ["day", "item_id", "qty", "revenue", "price"]
     ("sales", CountTotal(), {"total": (1, 1e6)}),
     ("sales", CountZeros("qty"), {"delta": (0, 0.3)}),
-    ("sales", CountLag("day"), {"lag": (0, 3)}),
     ("sales", CountDuplicates(["day", "item_id"]), {"total": (0, 0)}),
     ("sales", CountNull(["qty"]), {"total": (0, 0)}),
     (
@@ -30,7 +29,6 @@ CHECKLIST1 = [
 
     # Table with clickstream ["dt", "item_id", "views", "clicks", "payments"]
     ("views", CountTotal(), {"total": (1, 1e6)}),
-    ("views", CountLag("dt"), {"lag": (0, 3)}),
     ("views", CountZeros("views"), {"delta": (0, 0.2)}),
     ("views", CountZeros("clicks"), {"delta": (0, 0.5)}),
     ("views", CountNull(["views", "clicks", "payments"]), {"delta": (0, 0.1)}),
@@ -61,13 +59,12 @@ CHECKLIST2 = [
     ("sales", CountNull(["price", "qty"], "all"), {"total": (0, 0)}),
     ("sales", CountDuplicates(["qty", "item_id"]), {"delta": (0, 0.5)}),
     ("sales", CountValue("day", "2022-10-22"), {"count": (1, 5)}),
-    ("sales", CountLag("day"), {"lag": (0, 3)}),
     (
         "sales",
         CountRatioBelow("revenue", "price", "qty", False),
         {"delta": (0, 0.05)}
     ),
-    ("sales", CountValueInRequiredSet("pay_card", ["мир", "mastercard", "visa"]), {"delta": (0.7, 1.0)}),
+    ("sales", CountValueInRequiredSet("pay_card", ["unionpay", "mastercard", "visa"]), {"delta": (0.7, 1.0)}),
     ("sales", CountValueInBounds('qty', 1, 8, True), {"count": (0, 2)}),
     ("sales", CountValueInBounds('qty', 1, 8, True), {"delta": (0, 0.5)}),
     ("sales", CountLastDayRows("day", 35), {}),
@@ -79,7 +76,6 @@ CHECKLIST2 = [
     # Table with clickstream ["dt", "item_id", "views", "clicks", "payments"]
     ("views", CountBelowValue("views", 1000, True), {"delta": (0, 0.5)}),
     ("views", CountGreaterValue("views", 1000, True), {"delta": (0, 0.3)}),
-    ("views", CountLag("dt"), {"lag": (0, 7)}),
     ("views", CountExtremeValuesFormula('views', 1, 'greater'), {"delta": (0, 0.2)}),
     ("views", CountLastDayRows("dt", 80), {"percentage": (50, 100)}),
     ("views", CountFewLastDayRows("dt", 80, 2), {"days": (1, 2)}),

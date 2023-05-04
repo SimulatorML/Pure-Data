@@ -3,12 +3,11 @@ import pickle
 
 import pandas as pd
 from test_fixtures.report_cases import TEST_CASES as report_cases
-
 from pure.report import Report
 
 
 def test_report_pandas():
-    """Test Report.
+    """Test Report. Pandas version.
 
     Check on simple examples that Report returns result equal to the expected one.
     """
@@ -63,7 +62,6 @@ def assert_report_equals(user_report: pd.DataFrame, valid_report: pd.DataFrame) 
     for (_, user), (_, valid) in zip(user_report.iterrows(), valid_report.iterrows()):
         # keys (columns in report) are expected to match
         assert set(user.keys()) == set(valid.keys())
-
         # check that metric result values in report are equal
         for key in valid.keys():
             if key == "values":
