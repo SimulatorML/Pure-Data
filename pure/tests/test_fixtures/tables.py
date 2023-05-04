@@ -20,7 +20,8 @@ av_table_shift = pickle.load(open(dump_av_table_shift, "rb"))
 av_table_none = pickle.load(open(dump_av_table_none, "rb"))
 
 TABLES1 = {
-    # Table with transactions
+    # Table with transactions, used to test most metrics,
+    # null values: np.nan
     "sales": pd.DataFrame(
         [
             ["2022-10-24", 100, np.nan, 120.0, 500.0, 'visa'],
@@ -33,7 +34,7 @@ TABLES1 = {
         ],
         columns=["day", "item_id", "qty", "price", "revenue", "pay_card"],
     ),
-    # Table with clickstream
+    # Table with clickstream, used to test most metrics
     "views": pd.DataFrame(
         [
             ["2022-09-24", 100, 1000, 219, 56],
@@ -48,10 +49,11 @@ TABLES1 = {
         ],
         columns=["dt", "item_id", "views", "clicks", "payments"],
     ),
-    # Table 10_000 samples
+    # Big table 10_000 samples, used to test quantile metrics
     "big_table": big_table_1,
 
-    # views table with dates from two years
+    # Views table with dates from two years,
+    # used to test CountLastDayRows and CountFewLastDayRows metrics
     "two_years": pd.DataFrame(
         [
             ["2022-09-24", 100, 1000, 219, 56],
@@ -66,18 +68,20 @@ TABLES1 = {
         ],
         columns=["dt", "item_id", "views", "clicks", "payments"],
     ),
-    # av_testing table ["revenue", "qty"], values for some dates are shifted by a constant
+    # AV_testing table ["revenue", "qty"], values for some dates are shifted by a constant,
+    # used to test AdversarialValidation metric
     "av_table_shift": av_table_shift,
 }
 
 TABLES2 = {
-    # Table with transactions
+    # Table with transactions, used to test most metrics,
+    # null values: None
     "sales": pd.DataFrame(
         [
             ["2022-10-21", 100, None, 120.0, 500.0, 'visa'],
             ["2022-10-21", 100, 6, 120.0, 720.0, 'visa'],
             ["2022-10-21", 200, 2, 200.0, 400.0, None],
-            ["2022-10-22", 300, None, 85.0, 850.0, "мир"],
+            ["2022-10-22", 300, None, 85.0, 850.0, "unionpay"],
             ["2022-10-22", 100, 3, 110.0, 330.0, "tinkoff"],
             ["2022-10-22", 200, None, 200.0, 1600.0, "paypal"],
             ["2022-10-23", 300, 0, 90.0, 0.0, "mastercard"],
@@ -86,19 +90,19 @@ TABLES2 = {
             ["2022-10-23", 200, 2, 200.0, 400.0, "mastercard"],
             ["2022-10-23", 300, None, 85.0, 850.0, "visa"],
             ["2022-10-27", 100, 3, 110.0, 33.0, None],
-            ["2022-10-27", 200, 8, 200.0, 160.0, "мир"],
+            ["2022-10-27", 200, 8, 200.0, 160.0, "unionpay"],
             ["2022-10-27", 300, 0, 90.0, 0.0, "visa"],
             ["2022-10-27", 100, None, 120.0, 500.0, "mastercard"],
-            ["2022-10-28", 100, 6, 120.0, 720.0, "мир"],
+            ["2022-10-28", 100, 6, 120.0, 720.0, "unionpay"],
             ["2022-10-29", 200, 2, 200.0, 400.0, 'visa'],
             ["2022-10-29", 300, None, 85.0, 850.0, 'visa'],
-            ["2022-10-29", 100, 3, 110.0, 330.0, "мир"],
+            ["2022-10-29", 100, 3, 110.0, 330.0, "unionpay"],
             ["2022-10-30", 200, 8, 0.0, 160.0, 'visa'],
             ["2022-10-31", 300, 1, 0.0, 1000.0, 'visa'],
         ],
         columns=["day", "item_id", "qty", "price", "revenue", "pay_card"],
     ),
-    # Table with clickstream
+    # Table with clickstream, used to test most metrics
     "views": pd.DataFrame(
         [
             ["2022-09-24", 100, 0, 219, 56],
@@ -122,9 +126,10 @@ TABLES2 = {
         ],
         columns=["dt", "item_id", "views", "clicks", "payments"],
     ),
-    # Table 10_000 samples
+    # Big table 10_000 samples, used to test quantile-like metrics
     "big_table": big_table_2,
 
-    # av_testing table ["revenue", "qty"], values for some dates are set to None
+    # AV_testing table ["revenue", "qty"], values for some dates are set to None,
+    # used to test AdversarialValidation metric
     "av_table_none": av_table_none
 }
