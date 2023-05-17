@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pure.metrics import Metric
 
 import pandas as pd
+import numpy as np
 import pyspark.sql as ps
 
 LimitType = Dict[str, Tuple[float, float]]
@@ -44,34 +45,40 @@ class Report:
         rows = []
         for table, metric, limits in self.checklist:
             # Init resulting row
-            row = {"table_name": table, "metric": repr(metric), "limits": str(limits)}
+            row = {"table_name": table, "metric_name": metric.__class__.__name__, "limits": str(limits)}
 
             # Run check
             try:
                 # Run metric
                 df = tables[table]
                 values = metric(df)
-                row["values"] = values
+                # row["values"] = values
                 row["status"] = "."
                 row["error"] = ""
-
-                # Check metrics
-                for key, (a, b) in limits.items():
-                    value = values[key]
-                    if not (a <= value <= b):
-                        row["status"] = "F"
-
+                limit_values = {}
+                if limits:
+                    # Check metrics
+                    for key, (a, b) in limits.items():
+                        value = values[key]
+                        limit_values[key] = np.around(value, 3)
+                        if not (a <= value <= b):
+                            row["status"] = "F"
+                row["values"] = limit_values
+                row["metric_values"] = values
             except Exception as e:
                 row["status"] = "E"
-                row["values"] = {}
                 row["error"] = type(e).__name__
-
+                row["values"] = {}
+                row["metric_values"] = {}
+            row["metric_params"] = list(vars(metric).values())
             # Append to other rows
             rows.append(row)
 
         # Print the results
         tables = sorted(list(set(tables.keys())))
         result = pd.DataFrame(rows)
+        order = ["table_name", "metric_name", "limits", "values", "status", "error", "metric_values", "metric_params"]
+        result = result[order]
 
         report["title"] = f"DQ Report for tables {tables}"
         report["result"] = result
@@ -104,34 +111,39 @@ class Report:
         rows = []
         for table, metric, limits in self.checklist:
             # Init resulting row
-            row = {"table_name": table, "metric": repr(metric), "limits": str(limits)}
+            row = {"table_name": table, "metric_name": metric.__class__.__name__, "limits": str(limits)}
 
             # Run check
             try:
                 # Run metric
                 df = tables[table]
                 values = metric(df)
-                row["values"] = values
                 row["status"] = "."
                 row["error"] = ""
-
-                # Check metrics
-                for key, (a, b) in limits.items():
-                    value = values[key]
-                    if not (a <= value <= b):
-                        row["status"] = "F"
-
+                limit_values = {}
+                if limits:
+                    # Check metrics
+                    for key, (a, b) in limits.items():
+                        value = values[key]
+                        limit_values[key] = np.around(value, 3)
+                        if not (a <= value <= b):
+                            row["status"] = "F"
+                row["values"] = limit_values
+                row["metric_values"] = values
             except Exception as e:
                 row["status"] = "E"
-                row["values"] = {}
                 row["error"] = type(e).__name__
-
+                row["values"] = {}
+                row["metric_values"] = {}
+            row["metric_params"] = list(vars(metric).values())
             # Append to other rows
             rows.append(row)
 
         # Print the results
         tables = sorted(list(set(tables.keys())))
         result = pd.DataFrame(rows)
+        order = ["table_name", "metric_name", "limits", "values", "status", "error", "metric_values", "metric_params"]
+        result = result[order]
 
         report["title"] = f"DQ Report for tables {tables}"
         report["result"] = result
