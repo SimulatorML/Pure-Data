@@ -32,7 +32,7 @@ Metrics:
 * CheckAdversarialValidation
 
 ## Usage
-There is a simple example where the key functionality of the package is presented:
+There is a simple example where the key functionality of the package is presented:\
 https://github.com/uberkinder/Pure-Data/blob/usage_example/examples/simple_example.ipynb
 
 
