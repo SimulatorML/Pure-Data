@@ -1,8 +1,10 @@
 # Pure Data
 Developed by students of the [Simulator ML (Karpov.Courses)](https://karpov.courses/simulator-ml)
 
-Pure Data is a framework designed to help solve the problem of data quality.
-The Pure Data framework includes:
+Pure Data is a tool designed to help organize data quality checks in your projects. 
+You simply define the data you want to test, the list of test metrics and success criteria, run the test, and get a report with the results.
+
+The Pure Data includes:
 * a list of different metrics that you can use to check the accuracy of the data;
 * Report class, with which you can iterate through a list of metrics and get some summary information about which metrics pass, fail, or drop with errors.
 
@@ -13,26 +15,6 @@ git clone https://github.com/uberkinder/Pure-Data.git
 
 ## Key Functionality
 There are plenty of metrics that you can use to control your data's accuracy and reliability.\
-Metrics:
-* CountTota
-* CountZeros
-* CountNull
-* CountDuplicates
-* CountValue
-* CountBelowValue
-* CountBelowColumn
-* CountRatioBelow
-* CountCB
-* CountLag
-* CountGreaterValue
-* CountValueInRequiredSet
-* CountValueInBounds
-* CountExtremeValuesFormula
-* CountExtremeValuesQuantile
-* CountLastDayRows
-* CountFewLastDayRows
-* CheckAdversarialValidation
-
 You can either just apply the metrics you need to your data or use the Report class to create a checklist with metrics you'd like to check and get summary information about the metrics results.
 ## Usage
 Below is a brief example of how you can use Pure to verify your data.
@@ -57,6 +39,12 @@ Then you can use Report just as follows
 report = Report(checklist=checklist, engine='pandas')
 result = report.fit(tables)
 ```
+
+Example of the report resulting dataframe:
+
+<img src="https://drive.google.com/uc?id=1CHbFnTnhf6EUDAdKo7QtYb55GLPaoEPk"
+     alt="Report dataframe"
+     style="display: block; margin-right: auto; margin-left: auto; width: 70%" />
 
 There is a more detailed example where the key functionality of the package is presented:\
 https://github.com/uberkinder/Pure-Data/blob/usage_example/examples/simple_example.ipynb
