@@ -8,33 +8,35 @@ The Pure Data includes:
 * a list of different metrics that you can use to check the accuracy of the data;
 * Report class, with which you can iterate through a list of metrics and get some summary information about which metrics pass, fail, or drop with errors.
 
-## Launch
+## How to install
 ```bash
 git clone https://github.com/uberkinder/Pure-Data.git
 ```
 
 ## Key Functionality
 There are plenty of metrics that you can use to control your data's accuracy and reliability.\
-You can either just apply the metrics you need to your data or use the Report class to create a checklist with metrics you'd like to check and get summary information about the metrics results.
+You can either just apply the metrics you need to your data or use the **Report** class to create a checklist with metrics you'd like to check and get summary information about the metrics results.
+
 ## Usage
 Below is a brief example of how you can use Pure to verify your data.
 
-Import Report class and metrics that you want to apply.
+Import **Report** class and metrics from which you can use any metrics you need.
 ```python
 from pure.report import Report
-from pure.metrics import CountTotal, CountZeros
+import pure.metrics as m
 ```
-Firstly, initialize tables with names and data you want to work with, and create a checklist with metrics.
 
-Metric returns a dict with some meta fields. In the checklist, you can specify which metric result fields you want to control within certain limits.
+Firstly, initialize tables with names and data you want to work with, and create a checklist with metrics. 
+
+**Metric** returns a dict with some meta fields. In the checklist, you can specify which metric result fields you want to control within certain limits.
 In this example, we will determine limits for the "total" field in the first case and the "delta" field in the second one. 
   
 ```python
 tables = {"simple_table": data}
-checklist = [("simple_table", CountTotal(), {"total": (1, 1e6)}),
-             ("simple_table", CountZeros("column_1"), {"delta": (0, 0.3)})]
+checklist = [("simple_table", m.CountTotal(), {"total": (1, 1e6)}),
+             ("simple_table", m.CountZeros("column_1"), {"delta": (0, 0.3)})]
 ```
-Then you can use Report just as follows
+Then you can use **Report** just as follows
 ```python
 report = Report(checklist=checklist, engine='pandas')
 result = report.fit(tables)
@@ -48,8 +50,3 @@ Example of the report resulting dataframe:
 
 There is a more detailed example where the key functionality of the package is presented:\
 https://github.com/uberkinder/Pure-Data/blob/usage_example/examples/simple_example.ipynb
-
-
-
-
-
