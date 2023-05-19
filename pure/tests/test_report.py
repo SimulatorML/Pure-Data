@@ -22,9 +22,9 @@ def test_report_pandas():
 
         expected_result = pickle.load(open(dump_file, "rb"))
         result = Report(checklist).fit(tables_set)
-        correct_order = [(row[0], str(row[1])) for row in checklist]
+        correct_order = [(row[0], row[1]) for index, row in expected_result['result'].iterrows()]
         result_order = [
-            (row[1]["table_name"], row[1]["metric"])
+            (row[1]["table_name"], row[1]["metric_name"])
             for row in result["result"].iterrows()
         ]
 
@@ -64,7 +64,7 @@ def assert_report_equals(user_report: pd.DataFrame, valid_report: pd.DataFrame) 
         assert set(user.keys()) == set(valid.keys())
         # check that metric result values in report are equal
         for key in valid.keys():
-            if key == "values":
+            if key == "metric_values":
                 assert metric_results_are_equal(user[key], valid[key])
                 continue
             assert user[key] == valid[key]

@@ -371,7 +371,7 @@ class CountValueInRequiredSet(Metric):
     """Number of values that satisfy possible values set.
 
     Count values in chosen column
-    that are included in the given set ('required_set').
+    that are included in the given list ('required_set').
     """
 
     column: str

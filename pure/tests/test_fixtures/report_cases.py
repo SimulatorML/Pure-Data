@@ -6,11 +6,11 @@ TEST_CASES = [
     {
         "tables_set": TABLES1,
         "checklist": CHECKLIST1,
-        "expected_result_dump_file": "dump1.pkl",
+        "expected_result_dump_file": "dump1.pickle",
     },
     {
-        "tables_set": TABLES2,
-        "checklist": CHECKLIST2,
-        "expected_result_dump_file": "dump2.pkl",
+         "tables_set": TABLES2,
+         "checklist": CHECKLIST2,
+         "expected_result_dump_file": "dump2.pickle",
     },
 ]
