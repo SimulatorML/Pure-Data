@@ -17,6 +17,10 @@ git clone https://github.com/uberkinder/Pure-Data.git
 There are plenty of metrics that you can use to control your data's accuracy and reliability.\
 You can either just apply the metrics you need to your data or use the **Report** class to create a checklist with metrics you'd like to check and get summary information about the metrics results.
 
+<img src="https://drive.google.com/uc?id=1IVn9xubBaCNcf_ln3wLlhEzvCyG5clmj"
+     alt="Pure application diagram"
+     style="display: block; margin-right: auto; margin-left: auto; width: 45%" />
+
 ## Usage
 Below is a brief example of how you can use Pure to verify your data.
 
