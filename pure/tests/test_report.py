@@ -22,7 +22,9 @@ def test_report_pandas():
 
         expected_result = pickle.load(open(dump_file, "rb"))
         result = Report(checklist).fit(tables_set)
-        correct_order = [(row[0], row[1]) for index, row in expected_result['result'].iterrows()]
+        correct_order = [
+            (row[0], row[1]) for index, row in expected_result["result"].iterrows()
+        ]
         result_order = [
             (row[1]["table_name"], row[1]["metric_name"])
             for row in result["result"].iterrows()
@@ -71,7 +73,7 @@ def assert_report_equals(user_report: pd.DataFrame, valid_report: pd.DataFrame) 
 
 
 def metric_results_are_equal(
-        user_result: dict, valid_result: dict, error_rate: float = 0.01
+    user_result: dict, valid_result: dict, error_rate: float = 0.01
 ) -> bool:
     """Check that user's result equals valid result.
     For float values checks non-strict equality within error

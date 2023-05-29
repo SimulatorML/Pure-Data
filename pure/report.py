@@ -45,7 +45,11 @@ class Report:
         rows = []
         for table, metric, limits in self.checklist:
             # Init resulting row
-            row = {"table_name": table, "metric_name": metric.__class__.__name__, "limits": str(limits)}
+            row = {
+                "table_name": table,
+                "metric_name": metric.__class__.__name__,
+                "limits": str(limits),
+            }
 
             # Run check
             try:
@@ -77,7 +81,16 @@ class Report:
         # Print the results
         tables = sorted(list(set(tables.keys())))
         result = pd.DataFrame(rows)
-        order = ["table_name", "metric_name", "limits", "values", "status", "error", "metric_values", "metric_params"]
+        order = [
+            "table_name",
+            "metric_name",
+            "limits",
+            "values",
+            "status",
+            "error",
+            "metric_values",
+            "metric_params",
+        ]
         result = result[order]
 
         report["title"] = f"DQ Report for tables {tables}"
@@ -111,7 +124,11 @@ class Report:
         rows = []
         for table, metric, limits in self.checklist:
             # Init resulting row
-            row = {"table_name": table, "metric_name": metric.__class__.__name__, "limits": str(limits)}
+            row = {
+                "table_name": table,
+                "metric_name": metric.__class__.__name__,
+                "limits": str(limits),
+            }
 
             # Run check
             try:
@@ -142,7 +159,16 @@ class Report:
         # Print the results
         tables = sorted(list(set(tables.keys())))
         result = pd.DataFrame(rows)
-        order = ["table_name", "metric_name", "limits", "values", "status", "error", "metric_values", "metric_params"]
+        order = [
+            "table_name",
+            "metric_name",
+            "limits",
+            "values",
+            "status",
+            "error",
+            "metric_values",
+            "metric_params",
+        ]
         result = result[order]
 
         report["title"] = f"DQ Report for tables {tables}"
