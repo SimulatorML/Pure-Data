@@ -1,10 +1,19 @@
-name: Lint
+name: Format code
 
 on: [push, pull_request]
 
 jobs:
-  lint:
+  format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: psf/black@stable
+      - uses: actions/checkout@v2
+      - name: Format code with black
+        run: |
+          pip install black
+          black .
+      - name: Sort imports with isort
+        run: |
+          pip install isort
+          isort .
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4
