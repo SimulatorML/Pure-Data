@@ -1,14 +1,14 @@
 """Valid metrics."""
 
-from typing import Any, Dict, Union, List
-from dataclasses import dataclass
 import datetime
+from dataclasses import dataclass
+from typing import Any, Dict, List, Union
 
+import numpy as np
 import pandas as pd
 import pyspark.sql as ps
-from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier
-import numpy as np
+from sklearn.model_selection import cross_val_score
 
 
 @dataclass
@@ -83,7 +83,7 @@ class CountNull(Metric):
     aggregation: str = "any"  # either "all", or "any"
 
     def __post_init__(self):
-        if self.aggregation not in ['all', 'any']:
+        if self.aggregation not in ["all", "any"]:
             raise ValueError("Aggregation must be either 'all' or 'any'.")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
@@ -100,7 +100,7 @@ class CountNull(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, count, when, isnan
+        from pyspark.sql.functions import col, count, isnan, when
 
         n = df.count()
         column = self.columns[0]
@@ -385,6 +385,7 @@ class CountValueInRequiredSet(Metric):
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
         from pyspark.sql.functions import col
+
         k = df.filter(col(self.column).isin(self.required_set)).count()
         return {"total": n, "count": k, "delta": k / n}
 
@@ -410,18 +411,31 @@ class CountValueInBounds(Metric):
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         if self.strict:
-            k = ((df[self.column] < self.upper_bound) & (df[self.column] > self.lower_bound)).sum()
+            k = (
+                (df[self.column] < self.upper_bound)
+                & (df[self.column] > self.lower_bound)
+            ).sum()
         else:
-            k = ((df[self.column] <= self.upper_bound) & (df[self.column] >= self.lower_bound)).sum()
+            k = (
+                (df[self.column] <= self.upper_bound)
+                & (df[self.column] >= self.lower_bound)
+            ).sum()
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         from pyspark.sql.functions import col
+
         n = df.count()
         if self.strict:
-            k = df.filter((col(self.column) < self.upper_bound) & (col(self.column) > self.lower_bound)).count()
+            k = df.filter(
+                (col(self.column) < self.upper_bound)
+                & (col(self.column) > self.lower_bound)
+            ).count()
         else:
-            k = df.filter((col(self.column) <= self.upper_bound) & (col(self.column) >= self.lower_bound)).count()
+            k = df.filter(
+                (col(self.column) <= self.upper_bound)
+                & (col(self.column) >= self.lower_bound)
+            ).count()
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -440,7 +454,7 @@ class CountExtremeValuesFormula(Metric):
     style: str = "greater"
 
     def __post_init__(self):
-        if self.style not in ['greater', 'lower']:
+        if self.style not in ["greater", "lower"]:
             raise ValueError("Style must be either 'greater' or 'lower'.")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
@@ -453,19 +467,21 @@ class CountExtremeValuesFormula(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, mean as mean_, stddev, isnan
+        from pyspark.sql.functions import col, isnan
+        from pyspark.sql.functions import mean as mean_
+        from pyspark.sql.functions import stddev
+
         n = df.count()
 
         mask = isnan(col(self.column)) | col(self.column).isNull()
         df = df.filter(~mask)
 
         df_stats = df.select(
-            mean_(col(self.column)).alias('mean'),
-            stddev(col(self.column)).alias('std')
+            mean_(col(self.column)).alias("mean"), stddev(col(self.column)).alias("std")
         ).collect()
-        mean = df_stats[0]['mean']
-        std = df_stats[0]['std']
-        if self.style == 'greater':
+        mean = df_stats[0]["mean"]
+        std = df_stats[0]["std"]
+        if self.style == "greater":
             k = df.filter(col(self.column) > (mean + self.std_coef * std)).count()
         else:
             k = df.filter(col(self.column) < (mean - self.std_coef * std)).count()
@@ -484,10 +500,10 @@ class CountExtremeValuesQuantile(Metric):
 
     column: str
     q: float = 0.8
-    style: str = 'greater'
+    style: str = "greater"
 
     def __post_init__(self):
-        if self.style not in ['greater', 'lower']:
+        if self.style not in ["greater", "lower"]:
             raise ValueError("Style must be either 'greater' or 'lower'.")
         if not 0 <= self.q <= 1:
             raise ValueError("Quantile should be in the interval [0, 1]")
@@ -495,7 +511,7 @@ class CountExtremeValuesQuantile(Metric):
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         quantile_value = df[self.column].quantile(self.q)
-        if self.style == 'greater':
+        if self.style == "greater":
             k = (df[self.column] > quantile_value).sum()
         else:
             k = (df[self.column] < quantile_value).sum()
@@ -504,6 +520,7 @@ class CountExtremeValuesQuantile(Metric):
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         from pyspark.sql import DataFrameStatFunctions
         from pyspark.sql.functions import col, isnan
+
         n = df.count()
 
         mask = isnan(col(self.column)) | col(self.column).isNull()
@@ -511,7 +528,7 @@ class CountExtremeValuesQuantile(Metric):
 
         st = DataFrameStatFunctions(df)
         quantile_value = st.approxQuantile(self.column, [self.q], 0)[0]
-        if self.style == 'greater':
+        if self.style == "greater":
             k = df.filter(col(self.column) > quantile_value).count()
         else:
             k = df.filter(col(self.column) < quantile_value).count()
@@ -539,28 +556,47 @@ class CountLastDayRows(Metric):
         last_date = df[self.column].max()
         last_date_count = len(df[df[self.column] == last_date])
         df_without_last = df[df[self.column] != last_date]
-        day_groups = df_without_last.groupby(pd.to_datetime(df_without_last[self.column]).dt.date)
+        day_groups = df_without_last.groupby(
+            pd.to_datetime(df_without_last[self.column]).dt.date
+        )
         average = day_groups.size().mean()
 
         percentage = (last_date_count / average) * 100
         if percentage >= self.percent:
             at_least = True
-        return {'average': average, 'last_date_count': last_date_count, 'percentage': percentage,
-                f'at_least_{self.percent}%': at_least}
+        return {
+            "average": average,
+            "last_date_count": last_date_count,
+            "percentage": percentage,
+            f"at_least_{self.percent}%": at_least,
+        }
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, to_date, mean as mean_, max as max_
+        from pyspark.sql.functions import col
+        from pyspark.sql.functions import max as max_
+        from pyspark.sql.functions import mean as mean_
+        from pyspark.sql.functions import to_date
+
         at_least = False
-        df_to_date = df.select(to_date(col(self.column)).alias('date'))
-        last_date = df_to_date.select(max_('date')).collect()[0][0]
-        last_date_count = df_to_date.filter(col('date') == last_date).count()
-        df_without_last = df_to_date.filter(col('date') != last_date)
-        average = df_without_last.groupby('date').count().select(mean_('count')).collect()[0][0]
+        df_to_date = df.select(to_date(col(self.column)).alias("date"))
+        last_date = df_to_date.select(max_("date")).collect()[0][0]
+        last_date_count = df_to_date.filter(col("date") == last_date).count()
+        df_without_last = df_to_date.filter(col("date") != last_date)
+        average = (
+            df_without_last.groupby("date")
+            .count()
+            .select(mean_("count"))
+            .collect()[0][0]
+        )
         percentage = (last_date_count / average) * 100
         if percentage >= self.percent:
             at_least = True
-        return {'average': average, 'last_date_count': last_date_count, 'percentage': percentage,
-                f'at_least_{self.percent}%': at_least}
+        return {
+            "average": average,
+            "last_date_count": last_date_count,
+            "percentage": percentage,
+            f"at_least_{self.percent}%": at_least,
+        }
 
 
 @dataclass
@@ -583,14 +619,16 @@ class CountFewLastDayRows(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         if self.number >= len(np.unique(df[self.column])):
-            raise ValueError("Number of days to check is greater or equal than total number of days.")
+            raise ValueError(
+                "Number of days to check is greater or equal than total number of days."
+            )
 
         sorted_df = df.sort_values(by=self.column)
         sorted_df[self.column] = pd.to_datetime(sorted_df[self.column])
         rows_per_day = sorted_df.groupby(sorted_df[self.column].dt.date).size()
-        average = rows_per_day[:-self.number].mean()
-        k = ((rows_per_day[-self.number:] / average * 100) >= self.percent).sum()
-        return {'average': average, 'days': k}
+        average = rows_per_day[: -self.number].mean()
+        k = ((rows_per_day[-self.number :] / average * 100) >= self.percent).sum()
+        return {"average": average, "days": k}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         # TODO: add pyspark implementation of call method
@@ -629,24 +667,26 @@ class CheckAdversarialValidation(Metric):
         start_1, end_1 = self.first_slice[0], self.first_slice[1]
         start_2, end_2 = self.second_slice[0], self.second_slice[1]
         if start_1 >= end_1 or start_2 >= end_2:
-            raise ValueError("First value in slice must be lower than second value in slice.")
+            raise ValueError(
+                "First value in slice must be lower than second value in slice."
+            )
 
         # try except: slices contain index values
         try:
-            first_part = df.select_dtypes(include=['number']).loc[start_1:end_1, :]
-            second_part = df.select_dtypes(include=['number']).loc[start_2:end_2, :]
-            first_part.insert(0, 'av_label', 0)
-            second_part.insert(0, 'av_label', 1)
+            first_part = df.select_dtypes(include=["number"]).loc[start_1:end_1, :]
+            second_part = df.select_dtypes(include=["number"]).loc[start_2:end_2, :]
+            first_part.insert(0, "av_label", 0)
+            second_part.insert(0, "av_label", 1)
 
             data = pd.concat([first_part, second_part], axis=0)
             shuffled_data = data.sample(frac=1)
             shuffled_data = shuffled_data.fillna(np.min(shuffled_data.min()) - 1000)
 
-            X, y = shuffled_data.drop(['av_label'], axis=1), shuffled_data['av_label']
+            X, y = shuffled_data.drop(["av_label"], axis=1), shuffled_data["av_label"]
 
             # cross validation, binary classifier
             classifier = RandomForestClassifier(random_state=42)
-            scores = cross_val_score(classifier, X, y, cv=5, scoring='roc_auc')
+            scores = cross_val_score(classifier, X, y, cv=5, scoring="roc_auc")
             mean_score = np.mean(scores)
             if mean_score > 0.5 + self.eps:
                 flag = False
@@ -654,7 +694,11 @@ class CheckAdversarialValidation(Metric):
                 forest.fit(X, y)
                 importances = np.around(forest.feature_importances_, 5)
                 importance_dict = dict(zip(X.columns, importances))
-            return {"similar": flag, "importances": importance_dict, "cv_roc_auc": np.around(mean_score, 5)}
+            return {
+                "similar": flag,
+                "importances": importance_dict,
+                "cv_roc_auc": np.around(mean_score, 5),
+            }
         except TypeError:
             print("Values in slices should be values from df.index .")
             raise
