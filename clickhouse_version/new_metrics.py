@@ -1,5 +1,7 @@
 from typing import Any, Dict, Union, List
 from clickhouse_driver import Client
+import pandas as pd
+import numpy as np
 
 
 class ClickhouseMetric:
@@ -36,17 +38,25 @@ class ClickhouseMetric:
         return {"total": n, "count": k, "delta": k / n}
 
     def countNull(self, table_name: str, columns: List[str], aggregation: str = "any") -> Dict[str, Any]:
-        # for now only check nan values and in 'all' mode
+        # TODO: deal the problem of null/nan values.
+        #  We cannot check isNan for not number columns
         n = self.client.execute(f"select count(*) from {table_name}")[0][0]
         if aggregation == "all":
-            columns_is_null = ') AND ('.join(f'isNaN({col})' for col in columns)
-            query = f"select countIf(({columns_is_null})) FROM {table_name} WHERE ({columns_is_null})"
-            k = self.client.execute(query)[0][0]
+            columns_are_null = ') and ('.join(f'(isNaN({col}) or isNull({col})' for col in columns)
+        elif aggregation == "any":
+            columns_are_null = ') or ('.join(f'isNaN({col})' for col in columns)
         else:
-            ...
+            raise ValueError("Unknown value for aggregation")
+        query = f"select countIf(*) from {table_name} where ({columns_are_null})"
+        k = self.client.execute(query)[0][0]
         return {"total": n, "count": k, "delta": k / n}
 
-    def countDuplicates(self) -> Dict[str, Any]:
+    def countDuplicates(self, table_name: str, columns: List[str]) -> Dict[str, Any]:
+        n = self.client.execute(f"select count(*) from {table_name}")[0][0]
+        table_columns = ','.join(f"{col}" for col in columns)
+        query = f"select count(*) - 1 as duplicates_count from {table_name} group by {table_columns} having " \
+                f"duplicates_count > 0 "
+        k = self.client.execute(query)[0][0]
         return {"total": n, "count": k, "delta": k / n}
 
     def countValue(self) -> Dict[str, Any]:
@@ -67,8 +77,8 @@ if __name__ == "__main__":
                    'port': '9000',
                    'user': 'user',
                    'password': 'password'}
-    table_name = "db1.sales_table"
+
+    table_name = "TABLES1.sales"
     metric = ClickhouseMetric(**base_params)
-    print(metric.countTotal(table_name))
-    print(metric.countZeros(table_name, "qty"))
-    print(metric.countNull(table_name, columns=["qty", "price"], aggregation='any'))
+    # print(metric.countTotal(table_name))
+    print(metric.countDuplicates(table_name, ["item_id", "qty"]))
