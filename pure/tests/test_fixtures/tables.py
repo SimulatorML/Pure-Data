@@ -1,9 +1,10 @@
 """Tables for checks."""
 
-import numpy as np
-import pandas as pd
 import os
 import pickle
+
+import numpy as np
+import pandas as pd
 
 values = np.arange(100, 1000, 2)
 
@@ -24,12 +25,12 @@ TABLES1 = {
     # null values: np.nan
     "sales": pd.DataFrame(
         [
-            ["2022-10-24", 100, np.nan, 120.0, 500.0, 'visa'],
-            ["2022-10-24", 100, np.nan, np.nan, 720.0, 'visa'],
-            ["2022-10-24", 200, 2, 200.0, 400.0, 'mastercard'],
-            ["2022-10-24", 300, 10, 85.0, 850.0, 'Visa'],
-            ["2022-10-23", 100, 3, 110.0, 330.0, 'mastercard'],
-            ["2022-10-23", 200, 8, 200.0, 1600.0, 'Visa'],
+            ["2022-10-24", 100, np.nan, 120.0, 500.0, "visa"],
+            ["2022-10-24", 100, np.nan, np.nan, 720.0, "visa"],
+            ["2022-10-24", 200, 2, 200.0, 400.0, "mastercard"],
+            ["2022-10-24", 300, 10, 85.0, 850.0, "Visa"],
+            ["2022-10-23", 100, 3, 110.0, 330.0, "mastercard"],
+            ["2022-10-23", 200, 8, 200.0, 1600.0, "Visa"],
             ["2022-10-23", 300, 0, 90.0, 0.0, np.nan],
         ],
         columns=["day", "item_id", "qty", "price", "revenue", "pay_card"],
@@ -51,7 +52,6 @@ TABLES1 = {
     ),
     # Big table 10_000 samples, used to test quantile metrics
     "big_table": big_table_1,
-
     # Views table with dates from two years,
     # used to test CountLastDayRows and CountFewLastDayRows metrics
     "two_years": pd.DataFrame(
@@ -78,8 +78,8 @@ TABLES2 = {
     # null values: None
     "sales": pd.DataFrame(
         [
-            ["2022-10-21", 100, None, 120.0, 500.0, 'visa'],
-            ["2022-10-21", 100, 6, 120.0, 720.0, 'visa'],
+            ["2022-10-21", 100, None, 120.0, 500.0, "visa"],
+            ["2022-10-21", 100, 6, 120.0, 720.0, "visa"],
             ["2022-10-21", 200, 2, 200.0, 400.0, None],
             ["2022-10-22", 300, None, 85.0, 850.0, "unionpay"],
             ["2022-10-22", 100, 3, 110.0, 330.0, "tinkoff"],
@@ -94,11 +94,11 @@ TABLES2 = {
             ["2022-10-27", 300, 0, 90.0, 0.0, "visa"],
             ["2022-10-27", 100, None, 120.0, 500.0, "mastercard"],
             ["2022-10-28", 100, 6, 120.0, 720.0, "unionpay"],
-            ["2022-10-29", 200, 2, 200.0, 400.0, 'visa'],
-            ["2022-10-29", 300, None, 85.0, 850.0, 'visa'],
+            ["2022-10-29", 200, 2, 200.0, 400.0, "visa"],
+            ["2022-10-29", 300, None, 85.0, 850.0, "visa"],
             ["2022-10-29", 100, 3, 110.0, 330.0, "unionpay"],
-            ["2022-10-30", 200, 8, 0.0, 160.0, 'visa'],
-            ["2022-10-31", 300, 1, 0.0, 1000.0, 'visa'],
+            ["2022-10-30", 200, 8, 0.0, 160.0, "visa"],
+            ["2022-10-31", 300, 1, 0.0, 1000.0, "visa"],
         ],
         columns=["day", "item_id", "qty", "price", "revenue", "pay_card"],
     ),
@@ -128,8 +128,7 @@ TABLES2 = {
     ),
     # Big table 10_000 samples, used to test quantile-like metrics
     "big_table": big_table_2,
-
     # AV_testing table ["revenue", "qty"], values for some dates are set to None,
     # used to test AdversarialValidation metric
-    "av_table_none": av_table_none
+    "av_table_none": av_table_none,
 }
