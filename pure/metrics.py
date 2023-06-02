@@ -1,14 +1,14 @@
 """Valid metrics."""
 
-from typing import Any, Dict, Union, List
-from dataclasses import dataclass
 import datetime
+from dataclasses import dataclass
+from typing import Any, Dict, List, Union
 
+import numpy as np
 import pandas as pd
 import pyspark.sql as ps
-from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier
-import numpy as np
+from sklearn.model_selection import cross_val_score
 
 
 @dataclass
@@ -100,7 +100,7 @@ class CountNull(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, count, when, isnan
+        from pyspark.sql.functions import col, count, isnan, when
 
         n = df.count()
         column = self.columns[0]
@@ -467,7 +467,9 @@ class CountExtremeValuesFormula(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, mean as mean_, stddev, isnan
+        from pyspark.sql.functions import col, isnan
+        from pyspark.sql.functions import mean as mean_
+        from pyspark.sql.functions import stddev
 
         n = df.count()
 
@@ -570,7 +572,10 @@ class CountLastDayRows(Metric):
         }
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, to_date, mean as mean_, max as max_
+        from pyspark.sql.functions import col
+        from pyspark.sql.functions import max as max_
+        from pyspark.sql.functions import mean as mean_
+        from pyspark.sql.functions import to_date
 
         at_least = False
         df_to_date = df.select(to_date(col(self.column)).alias("date"))

@@ -1,6 +1,7 @@
 """Test cases."""
-from test_fixtures.tables import TABLES1, TABLES2
 import datetime as dt
+
+from test_fixtures.tables import TABLES1, TABLES2
 
 today = dt.datetime.now()
 # Each metric can have multiple test cases with different tables,

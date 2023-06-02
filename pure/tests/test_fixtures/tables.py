@@ -1,9 +1,10 @@
 """Tables for checks."""
 
-import numpy as np
-import pandas as pd
 import os
 import pickle
+
+import numpy as np
+import pandas as pd
 
 values = np.arange(100, 1000, 2)
 

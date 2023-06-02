@@ -1,10 +1,11 @@
+import numbers
+
 import numpy as np
+from pyspark.sql import SparkSession
 from test_fixtures.metric_cases import TEST_CASES as metric_cases
 from test_fixtures.tables import TABLES1, TABLES2
 
 from pure import metrics
-from pyspark.sql import SparkSession
-import numbers
 
 
 def test_metrics_pandas():
