@@ -70,6 +70,12 @@ TEST_CASES = {
             "params": [["qty"], 'all'],
             "expected_result": {"total": 21, "count": 6, "delta": 0.28571},
         },
+        {
+            "tables_set": "TABLES2",
+            "table_name": "sales",
+            "params": [["pay_card"], 'all'],
+            "expected_result": {"total": 21, "count": 2, "delta": 0.09523},
+        },
     ],
     "countDuplicates": [
         {
@@ -171,7 +177,7 @@ TEST_CASES = {
             "expected_result": {"total": 7, "count": 5, "delta": 0.71428},
         },
     ],
-    "CountRatioBelow": [
+    "countRatioBelow": [
         {
             "tables_set": "TABLES1",
             "table_name": "sales",
@@ -197,7 +203,7 @@ TEST_CASES = {
             "expected_result": {"total": 21, "count": 13, "delta": 0.61905},
         },
     ],
-    "CountCB": [
+    "countCB": [
         {
             "tables_set": "TABLES1",
             "table_name": "big_table",
@@ -211,23 +217,23 @@ TEST_CASES = {
             "expected_result": {"lcb": 190.0, "ucb": 912.0},
         }
     ],
-    "CountLag": [
+    "countLag": [
         {
             "tables_set": "TABLES2",
             "table_name": "sales",
-            "params": ["day", "%Y-%m-%d"],
+            "params": ["day"],
             "expected_result": {"today": today.strftime("%Y-%m-%d"), "last_day": "2022-10-31",
                                 "lag": (today - dt.datetime(2022, 10, 31)).days},
         },
         {
             "tables_set": "TABLES2",
             "table_name": "views",
-            "params": ["dt", "%Y-%m-%d"],
+            "params": ["dt"],
             "expected_result": {"today": today.strftime("%Y-%m-%d"), "last_day": "2022-09-25",
                                 "lag": (today - dt.datetime(2022, 9, 25)).days},
         },
     ],
-    "CountValueInRequiredSet": [
+    "countValueInRequiredSet": [
         {
             "tables_set": "TABLES1",
             "table_name": "sales",
@@ -241,7 +247,7 @@ TEST_CASES = {
             "expected_result": {"total": 21, "count": 16, "delta": 0.76190},
         },
     ],
-    "CountValueInBounds": [
+    "countValueInBounds": [
         {
             "tables_set": "TABLES1",
             "table_name": "sales",
@@ -267,7 +273,7 @@ TEST_CASES = {
             "expected_result": {"total": 21, "count": 13, "delta": 0.61905},
         },
     ],
-    "CountExtremeValuesFormula": [
+    "countExtremeValuesFormula": [
         {
             "tables_set": "TABLES1",
             "table_name": "views",
@@ -293,7 +299,7 @@ TEST_CASES = {
             "expected_result": {"total": 7, "count": 1, "delta": 0.14286},
         },
     ],
-    "CountExtremeValuesQuantile": [
+    "countExtremeValuesQuantile": [
         {
             "tables_set": "TABLES1",
             "table_name": "big_table",
@@ -307,7 +313,7 @@ TEST_CASES = {
             "expected_result": {"total": 10000, "count": 489, "delta": 0.0489},
         }
     ],
-    "CountLastDayRows": [
+    "countLastDayRows": [
         {
             "tables_set": "TABLES2",
             "table_name": "sales",

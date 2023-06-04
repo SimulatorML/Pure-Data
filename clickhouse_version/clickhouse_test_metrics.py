@@ -1,19 +1,21 @@
 from typing import List
 import numpy as np
-from new_metric_cases import TEST_CASES as metric_cases
+from clickhouse_metric_cases import TEST_CASES as metric_cases
 
-from new_metrics import ClickhouseMetric
+from clickhouse_metrics import ClickhouseMetric
 import numbers
 
 
-# def test_metrics_clickhouse():
-#     """Test clickhouse engine metrics."""
-#     for metric_name in metric_cases.keys():
-#         run_one_clickhouse_test(metric_name)
+def test_metrics_clickhouse():
+    """Test clickhouse engine metrics."""
+    for metric_name in metric_cases.keys():
+        run_one_clickhouse_test(metric_name)
 
 
 def test_list_of_metrics_clickhouse():
-    metric_names= ["countTotal", "countZeros", "countDuplicates"]
+    metric_names = ["countTotal", "countZeros", "countDuplicates", "countValue", "countBelowValue", "countNull",
+                   "countRatioBelow", "countBelowColumn", "countGreaterValue", "countCB", "countLag"]
+    # metric_names = ["countLag"]
     for metric_name in metric_names:
         run_one_clickhouse_test(metric_name)
 
@@ -25,10 +27,12 @@ def run_one_clickhouse_test(metric_name):
                    'port': '9000',
                    'user': 'user',
                    'password': 'password'}
+    print("")
     for i, case in enumerate(test_cases):
-        tables_set = case["tables_set"]
-        if tables_set == "TABLES1":
-            table_name = case["table_name"]
+        print(metric_name, case)
+        tables_set = str(case["tables_set"])
+        table_name = case["table_name"]
+        if table_name in ["sales", "views"]:
             params = case["params"]
             expected_result = case["expected_result"]
             metric = ClickhouseMetric(**base_params)
@@ -41,7 +45,7 @@ def run_one_clickhouse_test(metric_name):
             )
             assert isinstance(metric_result, dict), msg
 
-            msg = ("Engine: pandas."
+            msg = ("Engine: clickhouse."
                    f" Metric {metric_name} returns wrong value in case №{i + 1}."
                    f" Yours value: {metric_result}. Valid value: {expected_result}"
                    )
@@ -50,5 +54,3 @@ def run_one_clickhouse_test(metric_name):
                     assert np.isclose(value, expected_result[key], rtol=1e-04), msg
                 else:
                     assert value == expected_result[key], msg
-
-
