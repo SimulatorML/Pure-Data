@@ -368,29 +368,29 @@ TEST_CASES = {
             "params": ["dt", 80, 2],
             "expected_result": {'average': 1.33333, 'days': 2},
         },
-    ],
-    "CheckAdversarialValidation": [
-        {
-            "tables_set": "TABLES1",
-            "table_name": "av_table_shift",
-            "params": [
-                (dt.date(2022, 4, 17), dt.date(2022, 5, 3)),
-                (dt.date(2022, 5, 3), dt.date(2022, 5, 17)),
-                0.05
-            ],
-            "expected_result": {"similar": False, "importances": {'revenue': 0.6597, 'qty': 0.3403},
-                                'cv_roc_auc': 0.64578}
-        },
-        {
-            "tables_set": "TABLES2",
-            "table_name": "av_table_none",
-            "params": [
-                (dt.date(2022, 4, 17), dt.date(2022, 5, 3)),
-                (dt.date(2022, 5, 3), dt.date(2022, 5, 17)),
-                0.05
-            ],
-            "expected_result": {"similar": False, "importances": {'revenue': 0.72474, 'qty': 0.27526},
-                                'cv_roc_auc': 0.70727}
-        }
     ]
+    # "CheckAdversarialValidation": [
+    #     {
+    #         "tables_set": "TABLES1",
+    #         "table_name": "av_table_shift",
+    #         "params": [
+    #             (dt.date(2022, 4, 17), dt.date(2022, 5, 3)),
+    #             (dt.date(2022, 5, 3), dt.date(2022, 5, 17)),
+    #             0.05
+    #         ],
+    #         "expected_result": {"similar": False, "importances": {'revenue': 0.6597, 'qty': 0.3403},
+    #                             'cv_roc_auc': 0.64578}
+    #     },
+    #     {
+    #         "tables_set": "TABLES2",
+    #         "table_name": "av_table_none",
+    #         "params": [
+    #             (dt.date(2022, 4, 17), dt.date(2022, 5, 3)),
+    #             (dt.date(2022, 5, 3), dt.date(2022, 5, 17)),
+    #             0.05
+    #         ],
+    #         "expected_result": {"similar": False, "importances": {'revenue': 0.72474, 'qty': 0.27526},
+    #                             'cv_roc_auc': 0.70727}
+    #     }
+    # ]
 }

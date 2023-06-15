@@ -189,6 +189,107 @@ class ClickhouseMetric:
         lag = self.client.execute(f"select dateDiff('day', toDate('{last_day}'), toDate('{today}'))")[0][0]
         return {"today": str(today), "last_day": str(last_day), "lag": lag}
 
+    def countValueInRequiredSet(self, table_name: str, column: str, required_set: List) -> Dict[str, any]:
+        """Number of values that satisfy possible values set.
+
+        Count values in chosen column
+        that are included in the given list ('required_set').
+        """
+        n = self.client.execute(f"select count(*) from {table_name}")[0][0]
+        query = f"select countIf({column} in {required_set}) as cnt from {table_name}"
+        k = self.client.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
+
+    def countValueInBounds(self, table_name: str, column: str, lower_bound: float, upper_bound: float,
+                           strict: bool = False) -> Dict[str, any]:
+
+        """Number of values that are inside available bounds.
+
+        Count values in chosen column that do satisfy defined bounds:
+        they are greater than 'lower_bound' or lower than 'upper_bound'.
+        If 'strict' is False, then inequalities are non-strict.
+        """
+        n = self.client.execute(f"select count(*) from {table_name}")[0][0]
+        if not strict:
+            ineq_1, ineq_2 = ">=", "<="
+        else:
+            ineq_1, ineq_2 = ">", "<"
+        n = self.client.execute(f"select count(*) from {table_name}")[0][0]
+        query = f"select countIf({column} {ineq_1} {lower_bound} and {column} {ineq_2} {upper_bound}) as cnt from {table_name}"
+        k = self.client.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
+
+    def countExtremeValuesFormula(self, table_name: str, column: str, std_coef: int, style: str = "greater") -> Dict[
+        str, any]:
+        """Number of extreme values calculated by formula.
+
+        Calculate mean and std in chosen column.
+        Count values in chosen column that are
+        greater than mean + std_coef * std if style == 'greater',
+        lower than mean - std_coef * std if style == 'lower'.
+        """
+        n = self.client.execute(f"select count(*) from {table_name}")[0][0]
+        sub_query = f"select {column} from {table_name} where isFinite({column})"
+        mean = self.client.execute(f"select avg({column}) from ({sub_query})")[0][0]
+        std = self.client.execute(f"select stddevPopStable({column}) from ({sub_query})")[0][0]
+        if style == "greater":
+            query = f"select count(*) from ({sub_query}) where {column} > {mean + std * std_coef}"
+        else:
+            query = f"select count(*) from ({sub_query}) where {column} < {mean - std * std_coef}"
+        k = self.client.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
+
+    def countExtremeValuesQuantile(self, table_name: str, column: str, q: float = 0.8, style: str = "greater") -> Dict[
+        str, any]:
+        """Number of extreme values calculated with quantile.
+
+        Calculate quantile in chosen column.
+        If style == 'greater', then count values in 'column' that are greater than
+        calculated quantile. Otherwise, if style == 'lower', count values that are lower
+        than calculated quantile.
+        """
+        n = self.client.execute(f"select count(*) from {table_name}")[0][0]
+        sub_query = f"select {column} from {table_name} where isFinite({column})"
+        quantile = self.client.execute(f"select quantile({column}, {q}) from {sub_query}")[0][0]
+        if style == "greater":
+            query = f"select count(*) from {sub_query} where {column} > {quantile}"
+        else:
+            query = f"select count(*) from {sub_query} where {column} < {quantile}"
+        k = self.client.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
+
+    def countLastDayRows(self, table_name: str, column: str, percent: float = 80) -> Dict[str, any]:
+        """Check if number of values in last day is at least 'percent'% of the average.
+
+        Calculate average number of rows per day in chosen date column.
+        If number of rows in last day is at least 'percent' value of the average, then
+        return True, else return False.
+        """
+        at_least = False
+
+
+        query_last_day = f"select toDate({column}) as dt from {table_name} order by dt desc limit 1"
+        last_day = self.client.execute(query_last_day)[0][0]
+        subquery = f"select {column} from {table_name} where {column} != toDate('{last_day}')"
+
+        n_rows_without_last = self.client.execute(f"select count(*) from ({subquery})")[0][0]
+        n_days_without_last = self.client.execute(
+            f"select countDistinct(toDate({column})) from ({subquery})")[0][0]
+        average = n_rows_without_last / n_days_without_last
+
+        last_date_count = self.client.execute(
+            f"select count(*) from {table_name} where {column} = toDate('{last_day}')")[0][0]
+
+        percentage = (last_date_count / average) * 100
+        if percentage >= percent:
+            at_least = True
+        return {
+            "average": average,
+            "last_date_count": last_date_count,
+            "percentage": percentage,
+            f"at_least_{percent}%": at_least,
+        }
+
 
 if __name__ == "__main__":
     base_params = {'host': 'localhost',
@@ -202,4 +303,4 @@ if __name__ == "__main__":
     table_name = "TABLES2.sales"
     metric = ClickhouseMetric(**base_params)
     # print(metric.countTotal(table_name))
-    print(metric.countLag(table_name, "day"))
+    print(metric.countLastDayRows(table_name, "day", 80))

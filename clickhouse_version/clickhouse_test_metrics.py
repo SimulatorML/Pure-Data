@@ -14,7 +14,8 @@ def test_metrics_clickhouse():
 
 def test_list_of_metrics_clickhouse():
     metric_names = ["countTotal", "countZeros", "countDuplicates", "countValue", "countBelowValue", "countNull",
-                   "countRatioBelow", "countBelowColumn", "countGreaterValue", "countCB", "countLag"]
+                    "countRatioBelow", "countBelowColumn", "countGreaterValue", "countCB", "countLag",
+                    "countValueInRequiredSet", "countValueInBounds", "countExtremeValuesFormula", "countExtremeValuesQuantile", "countLastDayRows"]
     # metric_names = ["countLag"]
     for metric_name in metric_names:
         run_one_clickhouse_test(metric_name)
