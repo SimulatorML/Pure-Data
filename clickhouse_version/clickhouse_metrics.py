@@ -173,8 +173,8 @@ class ClickhouseMetric:
         Calculate bounds for 'conf'-percent interval in chosen column.
         """
         alpha = 1 - conf
-        lcb = self.client.execute(f"select quantile({alpha / 2})({column}) from {table_name}")[0][0]
-        ucb = self.client.execute(f"select quantile({alpha / 2 + conf})({column}) from {table_name}")[0][0]
+        lcb = self.client.execute(f"select quantileExact({alpha / 2})({column}) from {table_name}")[0][0]
+        ucb = self.client.execute(f"select quantileExact({alpha / 2 + conf})({column}) from {table_name}")[0][0]
         return {"lcb": lcb, "ucb": ucb}
 
     def countLag(self, table_name: str, column: str) -> Dict[str, Any]:
@@ -249,12 +249,13 @@ class ClickhouseMetric:
         than calculated quantile.
         """
         n = self.client.execute(f"select count(*) from {table_name}")[0][0]
+        print(n)
         sub_query = f"select {column} from {table_name} where isFinite({column})"
-        quantile = self.client.execute(f"select quantile({column}, {q}) from {sub_query}")[0][0]
+        quantile = self.client.execute(f"select quantileExact({q})({column}) from ({sub_query})")[0][0]
         if style == "greater":
-            query = f"select count(*) from {sub_query} where {column} > {quantile}"
+            query = f"select count(*) from ({sub_query}) where {column} > {quantile}"
         else:
-            query = f"select count(*) from {sub_query} where {column} < {quantile}"
+            query = f"select count(*) from ({sub_query}) where {column} < {quantile}"
         k = self.client.execute(query)[0][0]
         return {"total": n, "count": k, "delta": k / n}
 
@@ -266,7 +267,6 @@ class ClickhouseMetric:
         return True, else return False.
         """
         at_least = False
-
 
         query_last_day = f"select toDate({column}) as dt from {table_name} order by dt desc limit 1"
         last_day = self.client.execute(query_last_day)[0][0]
@@ -291,6 +291,11 @@ class ClickhouseMetric:
         }
 
 
+def create_table(client, name, columns: str):
+    client.execute(
+        f"CREATE TABLE IF NOT EXISTS {name} ({columns}) ENGINE = Log;")
+
+
 if __name__ == "__main__":
     base_params = {'host': 'localhost',
                    'port': '9000',
@@ -300,7 +305,8 @@ if __name__ == "__main__":
     #                 port='9000',
     #                 user='user',
     #                 password='password', settings={'use_numpy': True})
-    table_name = "TABLES2.sales"
+
+    table_name = "TABLES1.big_table"
     metric = ClickhouseMetric(**base_params)
     # print(metric.countTotal(table_name))
-    print(metric.countLastDayRows(table_name, "day", 80))
+    print(metric.countExtremeValuesQuantile(table_name, "revenue", 0.9, "greater"))
