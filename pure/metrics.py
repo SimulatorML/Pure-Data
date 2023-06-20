@@ -261,6 +261,14 @@ class CountDuplicates(Metric):
         k = n - m
         return {"total": n, "count": k, "delta": k / n}
 
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 @dataclass
 class CountValue(Metric):
@@ -283,6 +291,15 @@ class CountValue(Metric):
         n = df.count()
         k = df.filter(col(self.column) == self.value).count()
         return {"total": n, "count": k, "delta": k / n}
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 
 @dataclass
@@ -315,6 +332,15 @@ class CountBelowValue(Metric):
         else:
             k = df.filter(col(self.column) <= self.value).count()
         return {"total": n, "count": k, "delta": k / n}
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 
 @dataclass
@@ -351,6 +377,15 @@ class CountBelowColumn(Metric):
         else:
             k = df.filter(col(self.column_x) <= col(self.column_y)).count()
         return {"total": n, "count": k, "delta": k / n}
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 
 @dataclass
@@ -393,6 +428,15 @@ class CountRatioBelow(Metric):
             k = df.filter(ratio <= col(self.column_z)).count()
         return {"total": n, "count": k, "delta": k / n}
 
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
+
 
 @dataclass
 class CountCB(Metric):
@@ -421,6 +465,15 @@ class CountCB(Metric):
         st = DataFrameStatFunctions(df)
         ci = st.approxQuantile(self.column, [alpha / 2, self.conf + alpha / 2], 0)
         return {"lcb": ci[0], "ucb": ci[1]}
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 
 @dataclass
@@ -453,6 +506,15 @@ class CountLag(Metric):
         a = a.strftime(self.fmt)
         b = b.strftime(self.fmt)
         return {"today": a, "last_day": b, "lag": lag}
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 
 @dataclass
@@ -488,6 +550,15 @@ class CountGreaterValue(Metric):
             k = df.filter(col(self.column) >= self.value).count()
         return {"total": n, "count": k, "delta": k / n}
 
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
+
 
 @dataclass
 class CountValueInRequiredSet(Metric):
@@ -511,6 +582,15 @@ class CountValueInRequiredSet(Metric):
 
         k = df.filter(col(self.column).isin(self.required_set)).count()
         return {"total": n, "count": k, "delta": k / n}
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 
 @dataclass
@@ -561,6 +641,15 @@ class CountValueInBounds(Metric):
             ).count()
         return {"total": n, "count": k, "delta": k / n}
 
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
+
 
 @dataclass
 class CountExtremeValuesFormula(Metric):
@@ -610,6 +699,15 @@ class CountExtremeValuesFormula(Metric):
             k = df.filter(col(self.column) < (mean - self.std_coef * std)).count()
         return {"total": n, "count": k, "delta": k / n}
 
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
+
 
 @dataclass
 class CountExtremeValuesQuantile(Metric):
@@ -656,6 +754,15 @@ class CountExtremeValuesQuantile(Metric):
         else:
             k = df.filter(col(self.column) < quantile_value).count()
         return {"total": n, "count": k, "delta": k / n}
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 
 @dataclass
@@ -721,6 +828,15 @@ class CountLastDayRows(Metric):
             f"at_least_{self.percent}%": at_least,
         }
 
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
+
 
 @dataclass
 class CountFewLastDayRows(Metric):
@@ -756,6 +872,15 @@ class CountFewLastDayRows(Metric):
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         # TODO: add pyspark implementation of call method
         raise NotImplementedError("This method is not implemented yet.")
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
 
 
 @dataclass
@@ -829,3 +954,12 @@ class CheckAdversarialValidation(Metric):
     def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
         # TODO: add pyspark implementation of call method
         raise NotImplementedError("This method is not implemented yet.")
+
+    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        pass
+
+    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        pass
