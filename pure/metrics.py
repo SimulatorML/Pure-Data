@@ -30,8 +30,10 @@ class Metric:
             return self._call_pyspark(df)
         elif engine == "clickhouse":
             return self._call_clickhouse(df, sql_connector)
-        elif engine == "clickhouse":
+        elif engine == "postgresql":
             return self._call_postgresql(df, sql_connector)
+        elif engine == "mssql":
+            return self._call_mssql(df, sql_connector)
 
         msg = (
             f"Not supported type of 'engine': {engine}. "
@@ -45,14 +47,23 @@ class Metric:
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         return {}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
         return {}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
         return {}
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         return {}
+
 
 @dataclass
 class CountTotal(Metric):
@@ -64,19 +75,28 @@ class CountTotal(Metric):
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
         return {"total": df.count()}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {df}")[0][0]
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
         return {"total": n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        query = f'SELECT COUNT(*) FROM {df};'
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        query = f'SELECT COUNT(*) FROM {table_name};'
         n = sql_connector.execute(query).fetchone()[0]
 
         return {"total": n}
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        total = sql_connector.execute(f"SELECT COUNT(*) FROM {df}").fetchone()[0]
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         return {"total": total}
+
 
 @dataclass
 class CountZeros(Metric):
@@ -99,27 +119,34 @@ class CountZeros(Metric):
         k = df.filter(col(self.column) == 0).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {df}")[0][0]
-        k = sql_connector.execute(f"select countIf({self.column} = 0) from {df}")[0][0]
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        k = sql_connector.execute(f"select countIf({self.column} = 0) from {table_name}")[0][0]
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        query_k = f'SELECT COUNT(*) FROM {df} WHERE {self.column} = 0;'
-        query_n = f'SELECT COUNT(*) FROM {df};'
-
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        query_k = f'SELECT COUNT(*) FROM {table_name} WHERE {self.column} = 0;'
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
 
         k = sql_connector.execute(query_k).fetchone()[0]
         n = sql_connector.execute(query_n).fetchone()[0]
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         zeroes = sql_connector.execute(
-            f"SELECT COUNT(*) FROM {df} WHERE {self.column} = 0"
+            f"SELECT COUNT(*) FROM {table_name} WHERE {self.column} = 0"
         ).fetchone()[0]
 
-        total = sql_connector.execute(f"SELECT COUNT(*) FROM {df}").fetchone()[0]
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
         return {"total": total, "count": zeroes, "delta": zeroes / total}
 
@@ -172,8 +199,12 @@ class CountNull(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {df}")[0][0]
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
         if self.aggregation == "all":
             sep = "and"
         elif self.aggregation == "any":
@@ -182,19 +213,23 @@ class CountNull(Metric):
             raise ValueError("Unknown value for aggregation")
         try:
             columns_null = f") {sep} (".join(f'isNaN({col})' for col in self.columns)
-            query = f"select count(*) from {df} where ({columns_null})"
+            query = f"select count(*) from {table_name} where ({columns_null})"
             k = sql_connector.execute(query)[0][0]
             return {"total": n, "count": k, "delta": k / n}
         except Exception as e:
             # check values to be NULL or zero length
             columns_null = f") {sep} (".join(f'isNull({col})' for col in self.columns)
             zero_length = f") {sep} (".join(f"length({col}) = 0" for col in self.columns)
-            query = f"select count(*) from {df} where ({columns_null})"
-            query_zero = f"select count(*) from {df} where ({zero_length})"
+            query = f"select count(*) from {table_name} where ({columns_null})"
+            query_zero = f"select count(*) from {table_name} where ({zero_length})"
             k = sql_connector.execute(query)[0][0] + sql_connector.execute(query_zero)[0][0]
             return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
         if self.aggregation == 'any':
             statement = ' OR '.join(f'({col} IS NULL)' for col in self.columns)
 
@@ -204,16 +239,16 @@ class CountNull(Metric):
         else:
             raise ValueError("Unknown value for aggregation")
 
-        query_k = f'SELECT COUNT(*) FROM {df} WHERE {statement};'
-        query_n = f'SELECT COUNT(*) FROM {df};'
+        query_k = f'SELECT COUNT(*) FROM {table_name} WHERE {statement};'
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
 
         k = sql_connector.execute(query_k).fetchone()[0]
         n = sql_connector.execute(query_n).fetchone()[0]
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        total = sql_connector.execute(f"SELECT COUNT(*) FROM {df}").fetchone()[0]
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
         if self.aggregation == 'all':
             condition = ""
@@ -222,7 +257,7 @@ class CountNull(Metric):
             condition = condition[:-5]
 
             count = sql_connector.execute(
-                f"SELECT COUNT(*) FROM {df} WHERE {condition}"
+                f"SELECT COUNT(*) FROM {table_name} WHERE {condition}"
             ).fetchone()[0]
 
         elif self.aggregation == 'any':
@@ -232,7 +267,7 @@ class CountNull(Metric):
             condition = condition[:-4]
 
             count = sql_connector.execute(
-                f"SELECT COUNT(*) FROM {df} WHERE {condition}"
+                f"SELECT COUNT(*) FROM {table_name} WHERE {condition}"
             ).fetchone()[0]
 
         else:
@@ -261,14 +296,55 @@ class CountDuplicates(Metric):
         k = n - m
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        table_columns = ','.join(f"{col}" for col in self.columns)
+        subquery = f"select count(*) - 1 as duplicates_count" \
+                   f" from {table_name} " \
+                   f"group by {table_columns}" \
+                   f" having " \
+                   f"duplicates_count > 0 "
+        query = f"SELECT SUM(duplicates_count) AS total_duplicates_count from ({subquery}) subquery"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        statement = ', '.join(f'{col}' for col in self.columns)
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        query_k = f'SELECT SUM(cnt - 1)::float FROM ( \
+                            SELECT {statement}, COUNT(*) as cnt \
+                            FROM {table_name} \
+                            GROUP BY {statement} \
+                            HAVING COUNT(*) > 1 \
+                            ) as duplicates;'
+
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        unique = sql_connector.execute(
+            f"SELECT COUNT(*) FROM (SELECT DISTINCT {', '.join(self.columns)} FROM {table_name}) t"
+        ).fetchone()[0]
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        duplicates = total - unique
+
+        return {"total": total, "count": duplicates, "delta": duplicates / total}
+
 
 @dataclass
 class CountValue(Metric):
@@ -292,14 +368,57 @@ class CountValue(Metric):
         k = df.filter(col(self.column) == self.value).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        try:
+            query = f"select count(*)" \
+                    f" from {table_name}" \
+                    f" where toDate({self.column}) = toDate('{self.value}')"
+            k = sql_connector.execute(query)[0][0]
+            return {"total": n, "count": k, "delta": k / n}
+        except Exception as e:
+            try:
+                query = f"select count(*) from {table_name} where {self.column} = {self.value}"
+                k = sql_connector.execute(query)[0][0]
+                return {"total": n, "count": k, "delta": k / n}
+            except Exception as e:
+                print(e)
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                  f"WHERE {self.column} = '{self.value}';"
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        if isinstance(self.value, str):
+            value = sql_connector.execute(
+                f"SELECT COUNT({self.column}) "
+                f"FROM {table_name} "
+                f"WHERE {self.column} = '{self.value}'"
+            ).fetchone()[0]
+        else:
+            value = sql_connector.execute(
+                f"SELECT COUNT({self.column}) FROM {table_name} WHERE {self.column} = {self.value}"
+            ).fetchone()[0]
+        return {"total": total, "count": value, "delta": value / total}
 
 
 @dataclass
@@ -333,14 +452,59 @@ class CountBelowValue(Metric):
             k = df.filter(col(self.column) <= self.value).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        if not self.strict:
+            ineq = "<="
+        else:
+            ineq = "<"
+        query = f"select count(*) from {table_name} where {self.column} {ineq} {self.value}"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        if self.strict:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} < {self.value};'
+        else:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} <= {self.value};'
+
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
 
     def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {df}").fetchone()[0]
+
+        if self.strict:
+            value = sql_connector.execute(
+                f"SELECT COUNT({self.column}) "
+                f"FROM {df} "
+                f"WHERE {self.column} < {self.value}"
+            ).fetchone()[0]
+        else:
+            value = sql_connector.execute(
+                f"SELECT COUNT({self.column}) "
+                f"FROM {df} "
+                f"WHERE {self.column} <= {self.value}"
+            ).fetchone()[0]
+
+        return {"total": total, "count": value, "delta": value / total}
 
 
 @dataclass
@@ -378,14 +542,55 @@ class CountBelowColumn(Metric):
             k = df.filter(col(self.column_x) <= col(self.column_y)).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        if not self.strict:
+            ineq = "<="
+        else:
+            ineq = "<"
+        query = f"select count(*) from {table_name} where {self.column_x} {ineq} {self.column_y}"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        if self.strict:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column_x} < {self.column_y};'
+        else:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column_x} <= {self.column_y};'
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+        if self.strict:
+            count = sql_connector.execute(
+                f"SELECT COUNT(*) FROM {table_name} WHERE {self.column_x} < {self.column_y}"
+            ).fetchone()[0]
+        else:
+            count = sql_connector.execute(
+                f"SELECT COUNT(*) FROM {table_name} WHERE {self.column_x} <= {self.column_y}"
+            ).fetchone()[0]
+
+        return {"total": total, "count": count, "delta": count / total}
 
 
 @dataclass
@@ -428,14 +633,65 @@ class CountRatioBelow(Metric):
             k = df.filter(ratio <= col(self.column_z)).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        if not self.strict:
+            ineq = "<="
+        else:
+            ineq = "<"
+        query = f"select count(*)" \
+                f" from {table_name}" \
+                f" where {self.column_x} / {self.column_y} {ineq} {self.column_z}"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        if self.strict:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column_x}/{self.column_y} < {self.column_z}' \
+                      f' AND {self.column_y} != 0;'
+        else:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column_x}/{self.column_y} <= {self.column_z}' \
+                      f' AND {self.column_y} != 0;'
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+        if self.strict:
+            count = sql_connector.execute(
+                f"SELECT COUNT(*) "
+                f"FROM {table_name} "
+                f"WHERE {self.column_y} != 0 "
+                f"AND {self.column_x} / {self.column_y} < {self.column_z}"
+            ).fetchone()[0]
+        else:
+            count = sql_connector.execute(
+                f"SELECT COUNT(*) "
+                f"FROM {table_name} "
+                f"WHERE {self.column_y} != 0 "
+                f"AND {self.column_x} / {self.column_y} <= {self.column_z}"
+            ).fetchone()[0]
+
+        return {"total": total, "count": count, "delta": count / total}
 
 
 @dataclass
@@ -466,14 +722,55 @@ class CountCB(Metric):
         ci = st.approxQuantile(self.column, [alpha / 2, self.conf + alpha / 2], 0)
         return {"lcb": ci[0], "ucb": ci[1]}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        alpha = 1 - self.conf
+        lcb = sql_connector.execute(f"select quantileExact({alpha / 2})({self.column})"
+                                    f" from {table_name}"
+                                    )[0][0]
+        ucb = sql_connector.execute(
+            f"select quantileExact({alpha / 2 + self.conf})({self.column}) from {table_name}"
+        )[0][0]
+        return {"lcb": lcb, "ucb": ucb}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        alpha = 1 - self.conf
+        lcb_per = alpha / 2
+        ucb_per = 1 - alpha / 2
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        query_k = f'SELECT percentile_disc({lcb_per}) WITHIN GROUP ' \
+                  f'(ORDER BY {self.column}) AS p FROM {table_name};'
+        query_n = f'SELECT percentile_disc({ucb_per}) WITHIN GROUP ' \
+                  f'(ORDER BY {self.column}) AS p FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        lcb = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        ucb = sql_connector.conn.fetchone()[0]
+
+        return {"lcb": lcb, "ucb": ucb}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        alpha = 1 - self.conf
+        lcb = sql_connector.execute(
+            f"SELECT PERCENTILE_DISC({alpha / 2}) WITHIN GROUP (ORDER BY {table_name}) OVER()"
+            f" FROM {table_name}"
+        ).fetchone()[0]
+        ucb = sql_connector.execute(
+            f"SELECT PERCENTILE_DISC({alpha / 2 + self.conf})"
+            f" WITHIN GROUP (ORDER BY {table_name}) OVER() "
+            f"FROM {table_name}"
+        ).fetchone()[0]
+
+        return {"lcb": lcb, "ucb": ucb}
 
 
 @dataclass
@@ -507,14 +804,49 @@ class CountLag(Metric):
         b = b.strftime(self.fmt)
         return {"today": a, "last_day": b, "lag": lag}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        today = sql_connector.execute(f"select today()")[0][0]
+        query = f"select toDate({self.column}) as dt from {table_name} order by dt desc limit 1"
+        last_day = sql_connector.execute(query)[0][0]
+        lag = sql_connector.execute(
+            f"select dateDiff('day', toDate('{last_day}'), toDate('{today}'))"
+        )[0][0]
+        return {"today": str(today), "last_day": str(last_day), "lag": lag}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        query_today = "SELECT TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD');"
+        query_last = f"SELECT TO_CHAR({self.column}, 'YYYY-MM-DD') AS dt " \
+                     f'FROM {table_name} ORDER BY dt DESC LIMIT 1'
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        sql_connector.execute(query_today)
+        today = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_last)
+        last_day = sql_connector.conn.fetchone()[0]
+
+        query_lag = f"SELECT '{today}'::DATE - '{last_day}'::DATE AS lag"
+
+        sql_connector.execute(query_lag)
+        lag = sql_connector.conn.fetchone()[0]
+
+        return {"today": today, "last_day": last_day, "lag": lag}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        a = datetime.datetime.now()
+        b = sql_connector.execute(f"SELECT MAX({self.column}) FROM {table_name}").fetchone()[0]
+        lag = (a - b).days
+        a = a.strftime(self.fmt)
+        b = b.strftime(self.fmt)
+
+        return {"today": a, "last_day": b, "lag": lag}
 
 
 @dataclass
@@ -550,14 +882,56 @@ class CountGreaterValue(Metric):
             k = df.filter(col(self.column) >= self.value).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        if not self.strict:
+            ineq = ">="
+        else:
+            ineq = ">"
+        query = f"select count(*) from {table_name} where {self.column} {ineq} {self.value}"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        if self.strict:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} > {self.value};'
+        else:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} >= {self.value};'
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+        if self.strict:
+            count = sql_connector.execute(
+                f"SELECT COUNT(*) FROM {table_name} WHERE {self.column}  > {self.value}"
+            ).fetchone()[0]
+
+        else:
+            count = sql_connector.execute(
+                f"SELECT COUNT(*) FROM {table_name} WHERE {self.column}  >= {self.value}"
+            ).fetchone()[0]
+
+        return {"total": total, "count": count, "delta": count / total}
 
 
 @dataclass
@@ -583,14 +957,46 @@ class CountValueInRequiredSet(Metric):
         k = df.filter(col(self.column).isin(self.required_set)).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        query = f"select countIf({self.column} in {self.required_set}) as cnt from {table_name}"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                  f'WHERE {self.column} IN {tuple(self.required_set)};'
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+        condition = ""
+        for value in self.required_set:
+            condition += f"{self.column} LIKE '{value}' COLLATE SQL_Latin1_General_CP1_CS_AS OR "
+        condition = condition[:-3]
+
+        count = sql_connector.execute(
+            f"SELECT COUNT(*) FROM {table_name} WHERE {condition}"
+        ).fetchone()[0]
+
+        return {"total": total, "count": count, "delta": count / total}
 
 
 @dataclass
@@ -641,14 +1047,64 @@ class CountValueInBounds(Metric):
             ).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        if not self.strict:
+            ineq_1, ineq_2 = ">=", "<="
+        else:
+            ineq_1, ineq_2 = ">", "<"
+        query = f"select countIf({self.column} {ineq_1} {self.lower_bound} and " \
+                f"{self.column} {ineq_2} {self.upper_bound}) as cnt from {table_name}"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        if self.strict:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} > {self.lower_bound} ' \
+                      f'AND {self.column} < {self.upper_bound};'
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        else:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} >= {self.lower_bound} ' \
+                      f'AND {self.column} <= {self.upper_bound};'
+
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+        if self.strict:
+            count = sql_connector.execute(
+                "SELECT COUNT(*) "
+                f"FROM {table_name} "
+                f"WHERE {self.column} > {self.lower_bound} AND {self.column} < {self.upper_bound}"
+            ).fetchone()[0]
+
+        else:
+            count = sql_connector.execute(
+                f"SELECT COUNT(*) "
+                f"FROM {table_name} "
+                f"WHERE {self.column} BETWEEN {self.lower_bound} AND {self.upper_bound}"
+            ).fetchone()[0]
+
+        return {"total": total, "count": count, "delta": count / total}
 
 
 @dataclass
@@ -699,14 +1155,81 @@ class CountExtremeValuesFormula(Metric):
             k = df.filter(col(self.column) < (mean - self.std_coef * std)).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        sub_query = f"select {self.column} from {table_name} where isFinite({self.column})"
+        mean = sql_connector.execute(f"select avg({self.column}) from ({sub_query})")[0][0]
+        std = sql_connector.execute(
+            f"select stddevPopStable({self.column}) from ({sub_query})"
+        )[0][0]
+        if self.style == "greater":
+            query = f"select count(*)" \
+                    f" from ({sub_query})" \
+                    f" where {self.column} > {mean + std * self.std_coef}"
+        else:
+            query = f"select count(*)" \
+                    f" from ({sub_query})" \
+                    f" where {self.column} < {mean - std * self.std_coef}"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        query_mean = f'SELECT AVG({self.column}) FROM {table_name};'
+        sql_connector.execute(query_mean)
+        mean = sql_connector.conn.fetchone()[0]
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        query_std = f'SELECT STDDEV({self.column}) FROM {table_name};'
+        sql_connector.execute(query_std)
+        std = sql_connector.conn.fetchone()[0]
+
+        if self.style == 'greater':
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} > {mean + std * self.std_coef};'
+
+        else:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} < {mean - std * self.std_coef};'
+
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        mean = sql_connector.execute(
+            f"SELECT AVG(CAST({self.column} AS FLOAT)) FROM {table_name}"
+        ).fetchone()[0]
+        std = sql_connector.execute(f"SELECT STDEV({self.column}) FROM {table_name}").fetchone()[0]
+
+        if self.style == "greater":
+            count = sql_connector.execute(
+                f"SELECT COUNT({self.column}) "
+                f"FROM {table_name} "
+                f"WHERE {self.column} > {mean + std * self.std_coef}"
+            ).fetchone()[0]
+
+        else:
+            count = sql_connector.execute(
+                f"SELECT COUNT({self.column}) "
+                f"FROM {table_name} "
+                f"WHERE {self.column} < {mean - std * self.std_coef}"
+            ).fetchone()[0]
+
+        return {"total": total, "count": count, "delta": count / total}
 
 
 @dataclass
@@ -755,14 +1278,70 @@ class CountExtremeValuesQuantile(Metric):
             k = df.filter(col(self.column) < quantile_value).count()
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        sub_query = f"select {self.column} from {table_name} where isFinite({self.column})"
+        quantile = sql_connector.execute(
+            f"select quantileExact({self.q})({self.column}) from ({sub_query})"
+        )[0][0]
+        if self.style == "greater":
+            query = f"select count(*) from ({sub_query}) where {self.column} > {quantile}"
+        else:
+            query = f"select count(*) from ({sub_query}) where {self.column} < {quantile}"
+        k = sql_connector.execute(query)[0][0]
+        return {"total": n, "count": k, "delta": k / n}
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        query_quantile = f'SELECT percentile_disc({self.q}) ' \
+                         f'WITHIN GROUP (ORDER BY {self.column}) AS p ' \
+                         f'FROM {table_name};'
+        sql_connector.execute(query_quantile)
+        quantile = sql_connector.conn.fetchone()[0]
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        if self.style == 'greater':
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} > {quantile};'
+
+        else:
+            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
+                      f'WHERE {self.column} < {quantile};'
+
+        query_n = f'SELECT COUNT(*) FROM {table_name};'
+
+        sql_connector.execute(query_k)
+        k = sql_connector.conn.fetchone()[0]
+
+        sql_connector.execute(query_n)
+        n = sql_connector.conn.fetchone()[0]
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        value = sql_connector.execute(
+            f"SELECT PERCENTILE_DISC({self.q}) WITHIN GROUP (ORDER BY {self.column}) OVER() "
+            f"FROM {table_name}"
+        ).fetchone()[0]
+
+        if self.style == "greater":
+            count = sql_connector.execute(
+                f"SELECT COUNT({self.column}) FROM {table_name} WHERE {self.column} > {value}"
+            ).fetchone()[0]
+
+        else:
+            count = sql_connector.execute(
+                f"SELECT COUNT({self.column}) FROM {table_name} WHERE {self.column} < {value}"
+            ).fetchone()[0]
+
+        return {"total": total, "count": count, "delta": count / total}
 
 
 @dataclass
@@ -828,14 +1407,76 @@ class CountLastDayRows(Metric):
             f"at_least_{self.percent}%": at_least,
         }
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        at_least = False
+
+        query_last_day = f"select toDate({self.column}) as dt" \
+                         f" from {table_name} " \
+                         f"order by dt desc limit 1"
+        last_day = sql_connector.execute(query_last_day)[0][0]
+        subquery = f"select {self.column}" \
+                   f" from {table_name}" \
+                   f" where {self.column} != toDate('{last_day}')"
+
+        n_rows_without_last = sql_connector.execute(f"select count(*) from ({subquery})")[0][0]
+        n_days_without_last = sql_connector.execute(
+            f"select countDistinct(toDate({self.column})) from ({subquery})")[0][0]
+        average = n_rows_without_last / n_days_without_last
+
+        last_date_count = sql_connector.execute(
+            f"select count(*) from {table_name} where {self.column} = toDate('{last_day}')")[0][0]
+
+        percentage = (last_date_count / average) * 100
+        if percentage >= self.percent:
+            at_least = True
+        return {
+            "average": average,
+            "last_date_count": last_date_count,
+            "percentage": percentage,
+            f"at_least_{self.percent}%": at_least,
+        }
+
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
         pass
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        last_date_count = sql_connector.execute(
+            "SELECT COUNT(*) "
+            f"FROM {table_name} "
+            f"WHERE CAST({self.column} AS DATE) = "
+            f"(SELECT CAST(MAX({self.column}) AS DATE) FROM {table_name})"
+        ).fetchone()[0]
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+        non_last_day_avg = sql_connector.execute(
+            "SELECT AVG(CAST(n AS FLOAT)) "
+            "FROM "
+            f"(SELECT COUNT(*) AS n "
+            f"FROM {table_name} "
+            f"GROUP BY {self.column} "
+            f"HAVING {self.column} != (SELECT MAX({self.column}) FROM {table_name})) t"
+        ).fetchone()[0]
+
+        percentage = (last_date_count / non_last_day_avg) * 100
+
+        if percentage >= self.percent:
+            is_at_least = True
+        else:
+            is_at_least = False
+
+        return {
+            "average": non_last_day_avg,
+            "last_date_count": last_date_count,
+            "percentage": percentage,
+            f"at_least_{self.percent}%": is_at_least,
+        }
 
 
 @dataclass
@@ -866,7 +1507,7 @@ class CountFewLastDayRows(Metric):
         sorted_df[self.column] = pd.to_datetime(sorted_df[self.column])
         rows_per_day = sorted_df.groupby(sorted_df[self.column].dt.date).size()
         average = rows_per_day[: -self.number].mean()
-        k = ((rows_per_day[-self.number :] / average * 100) >= self.percent).sum()
+        k = ((rows_per_day[-self.number:] / average * 100) >= self.percent).sum()
         return {"average": average, "days": k}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -879,8 +1520,34 @@ class CountFewLastDayRows(Metric):
     def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
         pass
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        avg_rows_number = sql_connector.execute(
+            "SELECT AVG(rows_n) "
+            "FROM "
+            f"(SELECT CAST({self.column} AS DATE) AS date, COUNT(*) AS rows_n "
+            f"FROM {table_name} "
+            f"GROUP BY CAST({self.column} AS DATE)) t "
+            f"WHERE date < DATEADD("
+            f"DAY, {-self.number + 1}, (SELECT CAST(MAX({self.column}"
+            f") AS DATE) "
+            f"FROM {table_name}))"
+        ).fetchone()[0]
+
+        is_at_least = sql_connector.execute(
+            "SELECT COUNT(date) "
+            "FROM "
+            f"(SELECT CAST({self.column} AS DATE) AS date, COUNT(*) AS rows_n "
+            f"FROM {table_name} "
+            f"GROUP BY CAST({self.column} AS DATE)) t "
+            f"WHERE date >= DATEADD("
+            f"DAY, "
+            f"{-self.number + 1}, "
+            f"(SELECT CAST(MAX({self.column}) AS DATE) FROM {table_name})"
+            f") "
+            f"AND (rows_n / {avg_rows_number}) * 100 >= {self.percent}"
+        ).fetchone()[0]
+
+        return {"average": avg_rows_number, "days": is_at_least}
 
 
 @dataclass

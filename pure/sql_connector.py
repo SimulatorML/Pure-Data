@@ -11,7 +11,7 @@ class SQLConnector(ABC):
     """Base class for Connector"""
 
     @abstractmethod
-    def __init__(self, host: str, port: str, user: str, password: str, database: str = None):
+    def __init__(self, host: str, port: int, user: str, password: str, database: str = None):
         self.host = host
         self.port = port
         self.user = user
@@ -34,7 +34,7 @@ class SQLConnector(ABC):
 
 class ClickHouseConnector(SQLConnector):
     """Communication with the ClickHouse database"""
-    def __init__(self, host: str, port: str, user: str, password: str):
+    def __init__(self, host: str, port: int, user: str, password: str):
         super().__init__(host, port, user, password)
 
     def connect(self):
@@ -45,17 +45,18 @@ class ClickHouseConnector(SQLConnector):
             password=self.password,
             settings={'use_numpy': True}
         )
+        return self
 
     def execute(self, query):
-        self.conn.execute(query)
+        return self.conn.execute(query)
 
     def close(self):
-        self.conn.disconnect_connection()
+        return self.conn.disconnect_connection()
 
 
 class PostgreSQLConnector(SQLConnector):
     """Communication with the PostgreSQL database"""
-    def __init__(self, host: str, port: str, user: str, password: str, database):
+    def __init__(self, host: str, port: int, user: str, password: str, database):
         super().__init__(host, port, user, password, database)
 
     def connect(self):
@@ -67,15 +68,19 @@ class PostgreSQLConnector(SQLConnector):
             database=self.database
         ).cursor()
 
+        return self
+
     def execute(self, query):
         self.conn.execute(query)
+        return self.conn
 
     def close(self):
-        self.conn.close()
+        return self.conn.close()
+
 
 class MSSQLConnector(SQLConnector):
     """Communication with the PostgreSQL database"""
-    def __init__(self, host: str, port: str, user: str, password: str, database):
+    def __init__(self, host: str, port: int, user: str, password: str, database):
         super().__init__(host, port, user, password, database)
 
     def connect(self):
@@ -87,8 +92,10 @@ class MSSQLConnector(SQLConnector):
             f"PWD={self.password}"
         ).cursor()
 
+        return self
+
     def execute(self, query):
-        self.conn.execute(query)
+        return self.conn.execute(query)
 
     def close(self):
-        self.conn.close()
+        return self.conn.close()
