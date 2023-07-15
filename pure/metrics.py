@@ -432,7 +432,7 @@ class CountBelowValue(Metric):
 
     column: str
     value: float
-    strict: bool = False
+    strict: bool = True
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -517,7 +517,7 @@ class CountBelowColumn(Metric):
 
     column_x: str
     column_y: str
-    strict: bool = False
+    strict: bool = True
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -935,7 +935,7 @@ class CountGreaterValue(Metric):
 
 
 @dataclass
-class CountValueInRequiredSet(Metric):
+class CountValueIndSet(Metric):
     """Number of values that satisfy possible values set.
 
     Count values in chosen column
