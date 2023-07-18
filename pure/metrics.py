@@ -935,7 +935,7 @@ class CountGreaterValue(Metric):
 
 
 @dataclass
-class CountValueIndSet(Metric):
+class CountValueInSet(Metric):
     """Number of values that satisfy possible values set.
 
     Count values in chosen column
