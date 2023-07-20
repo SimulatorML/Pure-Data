@@ -61,7 +61,7 @@ CHECKLIST2 = [
     ("sales", m.CountDuplicates(["qty", "item_id"]), {"delta": (0, 0.5)}),
     ("sales", m.CountValue("day", "2022-10-22"), {"count": (1, 5)}),
     ("sales", m.CountRatioBelow("revenue", "price", "qty", False), {"delta": (0, 0.05)}),
-    ("sales", m.CountValueInRequiredSet("pay_card", ["unionpay", "mastercard", "visa"]), {"delta": (0.7, 1.0)}, ),
+    ("sales", m.CountValueInSet("pay_card", ["unionpay", "mastercard", "visa"]), {"delta": (0.7, 1.0)}, ),
     ("sales", m.CountValueInBounds("qty", 1, 8, True), {"count": (0, 2)}),
     ("sales", m.CountValueInBounds("qty", 1, 8, True), {"delta": (0, 0.5)}),
     ("sales", m.CountLastDayRows("day", 35), {}),
