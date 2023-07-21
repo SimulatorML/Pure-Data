@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pyspark.sql as ps
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_validate
 
 from pure.sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
 
@@ -170,15 +170,14 @@ class CountNull(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        mask = df[self.columns[0]].isna()
-        for column in self.columns[1:]:
-            if self.aggregation == "any":
-                mask |= df[column].isna()
-            elif self.aggregation == "all":
-                mask &= df[column].isna()
-            else:
-                raise ValueError("Unknown value for aggregation")
-        k = sum(mask)
+
+        if self.aggregation == "any":
+            k = np.sum(np.bitwise_or.reduce(df[self.columns].isna(), axis=1))
+        elif self.aggregation == "all":
+            k = np.sum(np.bitwise_and.reduce(df[self.columns].isna(), axis=1))
+        else:
+            raise ValueError("Unknown value for aggregation")
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -284,8 +283,8 @@ class CountDuplicates(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        m = len(df.drop_duplicates(subset=self.columns))
-        k = n - m
+        k = df.duplicated(subset=self.columns).sum()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -436,10 +435,12 @@ class CountBelowValue(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
+
         if self.strict:
-            k = sum(df[self.column] < self.value)
+            k = np.sum(df[self.column] < self.value)
         else:
-            k = sum(df[self.column] <= self.value)
+            k = np.sum(df[self.column] <= self.value)
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -522,9 +523,9 @@ class CountBelowColumn(Metric):
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         if self.strict:
-            k = sum(df[self.column_x] < df[self.column_y])
+            k = np.sum(df[self.column_x] < df[self.column_y])
         else:
-            k = sum(df[self.column_x] <= df[self.column_y])
+            k = np.sum(df[self.column_x] <= df[self.column_y])
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -610,10 +611,12 @@ class CountRatioBelow(Metric):
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         ratio = df[self.column_x] / df[self.column_y]
+
         if self.strict:
-            k = sum(ratio < df[self.column_z])
+            k = np.sum(ratio < df[self.column_z])
         else:
-            k = sum(ratio <= df[self.column_z])
+            k = np.sum(ratio <= df[self.column_z])
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -710,8 +713,8 @@ class CountCB(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         alpha = 1 - self.conf
-        lcb = df[self.column].quantile(alpha / 2)
-        ucb = df[self.column].quantile(alpha / 2 + self.conf)
+        lcb, ucb = np.quantile(df[self.column], [alpha / 2, self.conf + alpha / 2])
+
         return {"lcb": lcb, "ucb": ucb}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -864,10 +867,12 @@ class CountGreaterValue(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
+
         if self.strict:
-            k = sum(df[self.column] > self.value)
+            k = np.sum(df[self.column] > self.value)
         else:
-            k = sum(df[self.column] >= self.value)
+            k = np.sum(df[self.column] >= self.value)
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -947,7 +952,8 @@ class CountValueInSet(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        k = (df[self.column].isin(self.required_set)).sum()
+        k = np.sum(np.isin(df[self.column], self.required_set))
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -1019,16 +1025,19 @@ class CountValueInBounds(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
+        values = df[self.column].values
+
         if self.strict:
-            k = (
-                (df[self.column] < self.upper_bound)
-                & (df[self.column] > self.lower_bound)
-            ).sum()
+            k = np.sum(np.logical_and(
+                values > self.lower_bound,
+                values < self.upper_bound
+            ))
         else:
-            k = (
-                (df[self.column] <= self.upper_bound)
-                & (df[self.column] >= self.lower_bound)
-            ).sum()
+            k = np.sum(np.logical_and(
+                values >= self.lower_bound,
+                values <= self.upper_bound
+            ))
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -1127,11 +1136,15 @@ class CountExtremeValuesFormula(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        mean, std = df[self.column].mean(), df[self.column].std()
+        values = df[self.column]
+        mean = np.mean(values)
+        std = np.std(values)
+
         if self.style == "greater":
-            k = (df[self.column] > (mean + self.std_coef * std)).sum()
+            k = np.sum(values > (mean + self.std_coef * std))
         else:
-            k = (df[self.column] < (mean - self.std_coef * std)).sum()
+            k = np.sum(values < (mean - self.std_coef * std))
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -1254,11 +1267,14 @@ class CountExtremeValuesQuantile(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        quantile_value = df[self.column].quantile(self.q)
+        values = df[self.column].values
+        quantile_value = np.quantile(values, self.q)
+
         if self.style == "greater":
-            k = (df[self.column] > quantile_value).sum()
+            k = np.sum(values > quantile_value)
         else:
-            k = (df[self.column] < quantile_value).sum()
+            k = np.sum(values < quantile_value)
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -1361,18 +1377,13 @@ class CountLastDayRows(Metric):
             raise ValueError("Percent value should be greater than 0.")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
-        at_least = False
-        last_date = df[self.column].max()
-        last_date_count = len(df[df[self.column] == last_date])
-        df_without_last = df[df[self.column] != last_date]
-        day_groups = df_without_last.groupby(
-            pd.to_datetime(df_without_last[self.column]).dt.date
-        )
-        average = day_groups.size().mean()
+        daily_rows = df.groupby(pd.to_datetime(df[self.column]).dt.date).size().values
 
+        last_date_count = daily_rows[-1]
+        average = np.mean(daily_rows[:-1])
         percentage = (last_date_count / average) * 100
-        if percentage >= self.percent:
-            at_least = True
+        at_least = percentage >= self.percent
+
         return {
             "average": average,
             "last_date_count": last_date_count,
@@ -1503,11 +1514,10 @@ class CountFewLastDayRows(Metric):
                 "Number of days to check is greater or equal than total number of days."
             )
 
-        sorted_df = df.sort_values(by=self.column)
-        sorted_df[self.column] = pd.to_datetime(sorted_df[self.column])
-        rows_per_day = sorted_df.groupby(sorted_df[self.column].dt.date).size()
-        average = rows_per_day[: -self.number].mean()
-        k = ((rows_per_day[-self.number:] / average * 100) >= self.percent).sum()
+        daily_rows = df.groupby(pd.to_datetime(df[self.column]).dt.date).size().values
+        average = daily_rows[: -self.number].mean()
+        k = np.sum((daily_rows[-self.number :] / average * 100) >= self.percent)
+
         return {"average": average, "days": k}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -1575,48 +1585,65 @@ class CheckAdversarialValidation(Metric):
             raise ValueError("Slices must be length of 2.")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
-        np.random.seed(42)
-        flag = True
+        is_similar = True
         importance_dict = {}
 
         start_1, end_1 = self.first_slice[0], self.first_slice[1]
         start_2, end_2 = self.second_slice[0], self.second_slice[1]
+
+        # check for start >= end
         if start_1 >= end_1 or start_2 >= end_2:
-            raise ValueError(
-                "First value in slice must be lower than second value in slice."
-            )
+            raise ValueError("First value in slice must be lower than second value in slice.")
 
-        # try except: slices contain index values
+        # check for slices overlap
+        if (start_1 < start_2 < end_1) or (start_1 < end_2 < end_1):
+            raise ValueError("Slices must not overlap.")
+
+        # check for existence of numeric values
+        num_data = df.select_dtypes(include=["number"])
+        if len(num_data) == 0:
+            raise ValueError("Dataframe contains only non-numeric values.")
+
+        # try to slice df
         try:
-            first_part = df.select_dtypes(include=["number"]).loc[start_1:end_1, :]
-            second_part = df.select_dtypes(include=["number"]).loc[start_2:end_2, :]
-            first_part.insert(0, "av_label", 0)
-            second_part.insert(0, "av_label", 1)
-
-            data = pd.concat([first_part, second_part], axis=0)
-            shuffled_data = data.sample(frac=1)
-            shuffled_data = shuffled_data.fillna(np.min(shuffled_data.min()) - 1000)
-
-            X, y = shuffled_data.drop(["av_label"], axis=1), shuffled_data["av_label"]
-
-            # cross validation, binary classifier
-            classifier = RandomForestClassifier(random_state=42)
-            scores = cross_val_score(classifier, X, y, cv=5, scoring="roc_auc")
-            mean_score = np.mean(scores)
-            if mean_score > 0.5 + self.eps:
-                flag = False
-                forest = RandomForestClassifier(random_state=42)
-                forest.fit(X, y)
-                importances = np.around(forest.feature_importances_, 5)
-                importance_dict = dict(zip(X.columns, importances))
-            return {
-                "similar": flag,
-                "importances": importance_dict,
-                "cv_roc_auc": np.around(mean_score, 5),
-            }
+            first_part = num_data.loc[start_1:end_1, :]
+            second_part = num_data.loc[start_2:end_2, :]
         except TypeError:
-            print("Values in slices should be values from df.index .")
+            print("Unable to get slices for specified params")
             raise
+
+        if len(first_part) == 0 or len(second_part) == 0:
+            raise ValueError("Values in slices should be values from dataframe index.")
+
+        first_part.insert(0, "av_label", 0)
+        second_part.insert(0, "av_label", 1)
+
+        data = pd.concat([first_part, second_part], axis=0)
+        shuffled_data = data.sample(frac=1, random_state=42)
+        shuffled_data = shuffled_data.fillna(np.min(shuffled_data.min()) - 1000)
+
+        X, y = shuffled_data.drop(["av_label"], axis=1), shuffled_data["av_label"]
+
+        # cross validation, binary classifier
+        classifier = RandomForestClassifier(random_state=42)
+        cv_result = cross_validate(classifier, X, y, cv=5, scoring='roc_auc', return_estimator=True)
+        mean_score = np.mean(cv_result['test_score'])
+
+        # columns differences/importances
+        if mean_score > 0.5 + self.eps:
+            is_similar = False
+
+            importances = np.mean(
+                [est.feature_importances_ for est in cv_result['estimator']],
+                axis=0
+            )
+            importance_dict = dict(zip(X.columns, np.around(importances, 5)))
+
+        return {
+            "similar": is_similar,
+            "importances": importance_dict,
+            "cv_roc_auc": np.around(mean_score, 5),
+        }
 
     def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
         # TODO: add pyspark implementation of call method
