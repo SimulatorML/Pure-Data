@@ -5,7 +5,7 @@ from pyspark.sql import SparkSession
 from test_fixtures.metric_cases import TEST_CASES as metric_cases
 from test_fixtures.tables import TABLES1, TABLES2
 
-from pure import metrics
+import metrics
 
 
 def test_metrics_pandas():
@@ -34,7 +34,7 @@ def run_one_pandas_test(metric_name):
         expected_result = case["expected_result"]
 
         table = tables_set[table_name].copy()
-        metric_result = getattr(metrics, metric_name)(*params)(table)
+        metric_result = getattr(metrics, metric_name)(*params)('pandas', table)
 
         msg = f"Metric '{metric_name}' should " "return Dict[str, Any[float, int, str]]"
         assert isinstance(metric_result, dict), msg
@@ -64,7 +64,7 @@ def run_one_pyspark_test(metric_name):
 
         table = tables_set[table_name].copy()
         table_spark = spark.createDataFrame(table)
-        metric_result = getattr(metrics, metric_name)(*params)(table_spark)
+        metric_result = getattr(metrics, metric_name)(*params)('pyspark', table_spark)
 
         msg = f"Metric '{metric_name}' should " "return Dict[str, Any[float, int, str]]"
         assert isinstance(metric_result, dict), msg

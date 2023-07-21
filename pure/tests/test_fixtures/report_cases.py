@@ -1,6 +1,6 @@
 """Test cases."""
-from .report_checklists import CHECKLIST1, CHECKLIST2
-from .tables import TABLES1, TABLES2
+from text_fixtures.report_checklists import CHECKLIST1, CHECKLIST2
+from text_fixtures.tables import TABLES1, TABLES2
 
 TEST_CASES = [
     {

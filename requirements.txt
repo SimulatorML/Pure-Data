@@ -6,5 +6,5 @@ pytest==7.3.1
 scikit-learn==1.2.2
 scipy==1.10.1
 clickhouse_driver==0.2.6
-psycopg2==2.9.6
+psycopg2-binary==2.9.6
 pyodbc==4.0.39

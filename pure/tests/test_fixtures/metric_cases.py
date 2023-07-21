@@ -1,7 +1,7 @@
 """Test cases."""
 import datetime as dt
 
-from tables import TABLES1, TABLES2
+from test_fixtures.tables import TABLES1, TABLES2
 
 today = dt.datetime.now()
 # Each metric can have multiple test cases with different tables,
@@ -235,7 +235,7 @@ TEST_CASES = {
             },
         },
     ],
-    "CountValueInRequiredSet": [
+    "CountValueInSet": [
         {
             "tables_set": TABLES1,
             "table_name": "sales",
