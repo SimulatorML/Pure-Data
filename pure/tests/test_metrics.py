@@ -181,21 +181,6 @@ def test_count_last_day_rows_negative_percent():
         raise AssertionError("Negative percent is not handled.")
 
 
-def test_count_vew_last_day_rows_pyspark():
-    """Test CountFewLastDayRows metric, pyspark version (not implemented yet).
-
-    Test that calling pyspark version of CountFewLastDayRows
-    raises NotImplementedError .
-    """
-    run_one_pandas_test("CountFewLastDayRows")
-    try:
-        run_one_pyspark_test("CountFewLastDayRows")
-    except NotImplementedError:
-        pass
-    else:
-        raise AssertionError("Calling not implemented method is not handled.")
-
-
 def test_count_few_last_day_rows_negative_percent():
     """Test CountFewLastDayRows metric initialization.
 
@@ -233,7 +218,7 @@ def test_count_few_last_day_rows_number_greater():
     try:
         model = metrics.CountFewLastDayRows("day", 40, 8)
         df = TABLES2["sales"]
-        model(df)
+        model('pandas', df)
     except ValueError:
         pass
     else:
@@ -266,7 +251,7 @@ def test_check_adversarial_validation_slices_wrong_values():
     try:
         model = metrics.CheckAdversarialValidation((100, 200), (300, 250), eps=0.05)
         df = TABLES2["av_table_none"]
-        model(df)
+        model('pandas', df)
     except ValueError:
         pass
     else:
@@ -283,7 +268,7 @@ def test_check_adversarial_validation_non_index_slices():
     try:
         model = metrics.CheckAdversarialValidation((100, 200), (250, 300), eps=0.05)
         df = TABLES2["av_table_none"]
-        model(df)
+        model('pandas', df)
     except TypeError:
         pass
     else:

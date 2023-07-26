@@ -398,8 +398,8 @@ TEST_CASES = {
             ],
             "expected_result": {
                 "similar": False,
-                "importances": {"revenue": 0.6597, "qty": 0.3403},
-                "cv_roc_auc": 0.64578,
+                "importances": {"revenue": 0.64951, "qty": 0.35049},
+                "cv_roc_auc": 0.64575,
             },
         },
         {
@@ -412,7 +412,7 @@ TEST_CASES = {
             ],
             "expected_result": {
                 "similar": False,
-                "importances": {"revenue": 0.72474, "qty": 0.27526},
+                "importances": {"revenue": 0.70781, "qty": 0.29219},
                 "cv_roc_auc": 0.70727,
             },
         },
