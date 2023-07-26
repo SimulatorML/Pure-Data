@@ -1,7 +1,7 @@
 """Test cases."""
 import datetime as dt
 
-from pure import metrics as m
+import metrics as m
 
 # Checklist contains checks consist of:
 # - table_name

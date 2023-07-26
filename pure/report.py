@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pyspark.sql as ps
 
-from pure.metrics import Metric
-from pure.sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
+from metrics import Metric
+from sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
 
 LimitType = Dict[str, Tuple[float, float]]
 CheckType = Tuple[str, Metric, LimitType]
@@ -24,7 +24,7 @@ class Report:
     def fit(
             self,
             tables: Dict[str, Union[pd.DataFrame, ps.DataFrame, str]],
-            conn: List[str | int] = None) -> Dict:
+            conn: List[Union[str, int]] = None) -> Dict:
         """Calculate DQ metrics and build report."""
 
         if self.engine == "pandas":
