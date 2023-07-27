@@ -185,7 +185,6 @@ class CountNull(Metric):
 
         n = df.count()
 
-        # empty(nan, null) columns count for each row
         empty_cols = df.select(
             sum([when(isnan(c) | col(c).isNull(), 1).otherwise(0) for c in self.columns]).\
                 alias('cols')
@@ -1405,7 +1404,6 @@ class CountLastDayRows(Metric):
         if empty_rows_qty != 0:
             raise ValueError(f"None/nan values in column: {self.column}.")
 
-        # asc sorted daily rows qty
         daily_rows = df.groupBy(to_date(col(self.column)).alias(self.column)).count().\
             sort(asc(self.column)).select('count')
 
@@ -1537,7 +1535,6 @@ class CountFewLastDayRows(Metric):
         if empty_rows_qty != 0:
             raise ValueError(f"None/nan values in column: {self.column}.")
 
-        # asc sorted daily rows qty
         daily_rows = df.groupBy(to_date(col(self.column)).alias(self.column)).count().\
             sort(asc(self.column)).select('count')
 
@@ -1616,27 +1613,24 @@ class CheckAdversarialValidation(Metric):
         self._start_1, self._end_1 = self.first_slice[0], self.first_slice[1]
         self._start_2, self._end_2 = self.second_slice[0], self.second_slice[1]
 
-        # check for start >= end
         if self._start_1 >= self._end_1 or self._start_2 >= self._end_2:
             raise ValueError("First value in slice must be lower than second value in slice.")
 
-        # check for slices overlap
         if (self._start_1 < self._start_2 < self._end_1) or \
             (self._start_1 < self._end_2 < self._end_1):
             raise ValueError("Slices must not overlap.")
 
     def _compare_samples(self, X: np.ndarray, y: np.ndarray, columns: List[str]) ->\
         Tuple[bool, Dict[str, float], float]:
+        """Return roc_auc_score for binary classification and feature importances."""
 
         is_similar = True
         importance_dict = {}
 
-        # cross validation, binary classifier
         classifier = RandomForestClassifier(random_state=42)
         cv_result = cross_validate(classifier, X, y, cv=5, scoring='roc_auc', return_estimator=True)
         mean_score = np.mean(cv_result['test_score'])
 
-        # columns differences/importances
         if mean_score > 0.5 + self.eps:
             is_similar = False
 
@@ -1649,12 +1643,10 @@ class CheckAdversarialValidation(Metric):
         return is_similar, importance_dict, np.around(mean_score, 5)
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
-        # check for existence of numeric values
         num_data = df.select_dtypes(include=["number"])
         if len(num_data) == 0:
             raise ValueError("Dataframe contains only non-numeric values.")
 
-        # try to slice df
         try:
             first_part = num_data.loc[self._start_1 : self._end_1, :]
             second_part = num_data.loc[self._start_2 : self._end_2, :]
@@ -1693,7 +1685,6 @@ class CheckAdversarialValidation(Metric):
         is_similar = True
         importance_dict = {}
 
-        # check for existence of numeric values
         num_types = ['int', 'bigint', 'float', 'double']
         num_cols = [col for col, data_type in df.dtypes if data_type in num_types]
         if len(num_cols) == 0:
@@ -1701,12 +1692,10 @@ class CheckAdversarialValidation(Metric):
 
         num_data = df.select(num_cols)
 
-        # fill na values by global minimum minus 1000
         col_mins = num_data.agg(*[min_(col(column)).alias(f"{column}") for column in num_cols])
         min_value = col_mins.select(least(*col_mins.columns)).collect()[0][0]
         num_data = num_data.fillna(min_value - 1000)
 
-        # try to slice df
         try:
             first_part = num_data.filter(
                 (to_date(col('index')) >= self._start_1) & (to_date(col('index')) < self._end_1)
