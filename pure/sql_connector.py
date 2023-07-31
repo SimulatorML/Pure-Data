@@ -74,6 +74,16 @@ class PostgreSQLConnector(SQLConnector):
         self.conn.execute(query)
         return self.conn
 
+    def exec_with_params(self, query: str, params: Dict[str, Any]):
+        try:
+            self.conn.execute(query, params)
+        except Exception as err:
+            self.conn.connection.rollback()
+            print("An exception has occured: ", err)
+            raise
+
+        return self.conn
+
     def close(self):
         return self.conn.close()
 
