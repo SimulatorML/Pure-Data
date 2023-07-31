@@ -2,7 +2,7 @@
 
 import datetime
 from dataclasses import dataclass
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -181,20 +181,19 @@ class CountNull(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, count, isnan, when
+        from pyspark.sql.functions import col, isnan, when
 
         n = df.count()
-        column = self.columns[0]
-        mask = col(column).isNull() | isnan(col(column))
-        for column in self.columns[1:]:
-            if self.aggregation == "any":
-                mask |= col(column).isNull() | isnan(col(column))
-            elif self.aggregation == "all":
-                mask &= col(column).isNull() | isnan(col(column))
-            else:
-                raise ValueError("Unknown value for aggregation")
 
-        k = df.select(count(when(mask, column))).collect()[0][0]
+        empty_cols = df.select(
+            sum([when(isnan(c) | col(c).isNull(), 1).otherwise(0) for c in self.columns]).\
+                alias('cols')
+        )
+
+        if self.aggregation == 'all':
+            k = empty_cols.where(col('cols') == len(self.columns)).count()
+        else:
+            k = empty_cols.where(col('cols') != 0).count()
 
         return {"total": n, "count": k, "delta": k / n}
 
@@ -288,11 +287,10 @@ class CountDuplicates(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import countDistinct
-
         n = df.count()
-        m = df.select(countDistinct(*self.columns)).collect()[0][0]
+        m = df.select(self.columns).distinct().count()
         k = n - m
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -957,10 +955,11 @@ class CountValueInSet(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        n = df.count()
         from pyspark.sql.functions import col
 
+        n = df.count()
         k = df.filter(col(self.column).isin(self.required_set)).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -1148,9 +1147,7 @@ class CountExtremeValuesFormula(Metric):
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, isnan
-        from pyspark.sql.functions import mean as mean_
-        from pyspark.sql.functions import stddev
+        from pyspark.sql.functions import col, isnan, mean as mean_, stddev
 
         n = df.count()
 
@@ -1158,10 +1155,13 @@ class CountExtremeValuesFormula(Metric):
         df = df.filter(~mask)
 
         df_stats = df.select(
-            mean_(col(self.column)).alias("mean"), stddev(col(self.column)).alias("std")
+            mean_(col(self.column)).alias("mean"),
+            stddev(col(self.column)).alias("std")
         ).collect()
+
         mean = df_stats[0]["mean"]
         std = df_stats[0]["std"]
+
         if self.style == "greater":
             k = df.filter(col(self.column) > (mean + self.std_coef * std)).count()
         else:
@@ -1377,6 +1377,11 @@ class CountLastDayRows(Metric):
             raise ValueError("Percent value should be greater than 0.")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        empty_rows_qty = np.sum(df[self.column].isna())
+
+        if empty_rows_qty != 0:
+            raise ValueError(f"None/nan values in column: {self.column}.")
+
         daily_rows = df.groupby(pd.to_datetime(df[self.column]).dt.date).size().values
 
         last_date_count = daily_rows[-1]
@@ -1392,25 +1397,22 @@ class CountLastDayRows(Metric):
         }
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col
-        from pyspark.sql.functions import max as max_
-        from pyspark.sql.functions import mean as mean_
-        from pyspark.sql.functions import to_date
+        from pyspark.sql.functions import col, asc, to_date, isnan
 
-        at_least = False
-        df_to_date = df.select(to_date(col(self.column)).alias("date"))
-        last_date = df_to_date.select(max_("date")).collect()[0][0]
-        last_date_count = df_to_date.filter(col("date") == last_date).count()
-        df_without_last = df_to_date.filter(col("date") != last_date)
-        average = (
-            df_without_last.groupby("date")
-            .count()
-            .select(mean_("count"))
-            .collect()[0][0]
-        )
+        empty_rows_qty = df.filter(col(self.column).isNull() | isnan(self.column)).count()
+
+        if empty_rows_qty != 0:
+            raise ValueError(f"None/nan values in column: {self.column}.")
+
+        daily_rows = df.groupBy(to_date(col(self.column)).alias(self.column)).count().\
+            sort(asc(self.column)).select('count')
+
+        counts = [row['count'] for row in daily_rows.select('count').toLocalIterator()]
+        last_date_count = counts[-1]
+        average = np.mean(counts[:-1])
         percentage = (last_date_count / average) * 100
-        if percentage >= self.percent:
-            at_least = True
+        at_least = percentage >= self.percent
+
         return {
             "average": average,
             "last_date_count": last_date_count,
@@ -1509,6 +1511,11 @@ class CountFewLastDayRows(Metric):
             raise ValueError("Number of days to  check should be greater than 0.")
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        empty_rows_qty = np.sum(df[self.column].isna())
+
+        if empty_rows_qty != 0:
+            raise ValueError(f"None/nan values in column: {self.column}.")
+
         if self.number >= len(np.unique(df[self.column])):
             raise ValueError(
                 "Number of days to check is greater or equal than total number of days."
@@ -1521,8 +1528,27 @@ class CountFewLastDayRows(Metric):
         return {"average": average, "days": k}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        # TODO: add pyspark implementation of call method
-        raise NotImplementedError("This method is not implemented yet.")
+        from pyspark.sql.functions import col, asc, to_date, isnan
+
+        empty_rows_qty = df.filter(col(self.column).isNull() | isnan(self.column)).count()
+
+        if empty_rows_qty != 0:
+            raise ValueError(f"None/nan values in column: {self.column}.")
+
+        daily_rows = df.groupBy(to_date(col(self.column)).alias(self.column)).count().\
+            sort(asc(self.column)).select('count')
+
+        if self.number >= daily_rows.count():
+            raise ValueError(
+                "Number of days to check is greater or equal than total number of days."
+            )
+
+        counts = [row['count'] for row in daily_rows.select('count').toLocalIterator()]
+        last_dates_count = counts[-self.number:]
+        average = np.mean(counts[:-self.number])
+        k = sum([(x / average * 100) >= self.percent for x in last_dates_count])
+
+        return {"average": average, "days": k}
 
     def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
         pass
@@ -1584,30 +1610,46 @@ class CheckAdversarialValidation(Metric):
         if len(self.first_slice) != 2 or len(self.second_slice) != 2:
             raise ValueError("Slices must be length of 2.")
 
-    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        self._start_1, self._end_1 = self.first_slice[0], self.first_slice[1]
+        self._start_2, self._end_2 = self.second_slice[0], self.second_slice[1]
+
+        if self._start_1 >= self._end_1 or self._start_2 >= self._end_2:
+            raise ValueError("First value in slice must be lower than second value in slice.")
+
+        if (self._start_1 < self._start_2 < self._end_1) or \
+            (self._start_1 < self._end_2 < self._end_1):
+            raise ValueError("Slices must not overlap.")
+
+    def _compare_samples(self, X: np.ndarray, y: np.ndarray, columns: List[str]) ->\
+        Tuple[bool, Dict[str, float], float]:
+        """Return roc_auc_score for binary classification and feature importances."""
+
         is_similar = True
         importance_dict = {}
 
-        start_1, end_1 = self.first_slice[0], self.first_slice[1]
-        start_2, end_2 = self.second_slice[0], self.second_slice[1]
+        classifier = RandomForestClassifier(random_state=42)
+        cv_result = cross_validate(classifier, X, y, cv=5, scoring='roc_auc', return_estimator=True)
+        mean_score = np.mean(cv_result['test_score'])
 
-        # check for start >= end
-        if start_1 >= end_1 or start_2 >= end_2:
-            raise ValueError("First value in slice must be lower than second value in slice.")
+        if mean_score > 0.5 + self.eps:
+            is_similar = False
 
-        # check for slices overlap
-        if (start_1 < start_2 < end_1) or (start_1 < end_2 < end_1):
-            raise ValueError("Slices must not overlap.")
+            importances = np.mean(
+                [est.feature_importances_ for est in cv_result['estimator']],
+                axis=0
+            )
+            importance_dict = dict(zip(columns, np.around(importances, 5)))
 
-        # check for existence of numeric values
+        return is_similar, importance_dict, np.around(mean_score, 5)
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         num_data = df.select_dtypes(include=["number"])
         if len(num_data) == 0:
             raise ValueError("Dataframe contains only non-numeric values.")
 
-        # try to slice df
         try:
-            first_part = num_data.loc[start_1:end_1, :]
-            second_part = num_data.loc[start_2:end_2, :]
+            first_part = num_data.loc[self._start_1 : self._end_1, :]
+            second_part = num_data.loc[self._start_2 : self._end_2, :]
         except TypeError:
             print("Unable to get slices for specified params")
             raise
@@ -1622,32 +1664,66 @@ class CheckAdversarialValidation(Metric):
         shuffled_data = data.sample(frac=1, random_state=42)
         shuffled_data = shuffled_data.fillna(np.min(shuffled_data.min()) - 1000)
 
-        X, y = shuffled_data.drop(["av_label"], axis=1), shuffled_data["av_label"]
+        X = shuffled_data.drop(["av_label"], axis=1)
+        y = shuffled_data["av_label"].values
 
-        # cross validation, binary classifier
-        classifier = RandomForestClassifier(random_state=42)
-        cv_result = cross_validate(classifier, X, y, cv=5, scoring='roc_auc', return_estimator=True)
-        mean_score = np.mean(cv_result['test_score'])
-
-        # columns differences/importances
-        if mean_score > 0.5 + self.eps:
-            is_similar = False
-
-            importances = np.mean(
-                [est.feature_importances_ for est in cv_result['estimator']],
-                axis=0
-            )
-            importance_dict = dict(zip(X.columns, np.around(importances, 5)))
+        is_similar, importance_dict, score = self._compare_samples(X.values, y, X.columns)
 
         return {
             "similar": is_similar,
             "importances": importance_dict,
-            "cv_roc_auc": np.around(mean_score, 5),
+            "cv_roc_auc": score
         }
 
-    def _call_payspark(self, df: pd.DataFrame) -> Dict[str, Any]:
-        # TODO: add pyspark implementation of call method
-        raise NotImplementedError("This method is not implemented yet.")
+    def _call_pyspark(self, df: pd.DataFrame) -> Dict[str, Any]:
+        from pyspark.sql.functions import col, to_date, lit, least, min as min_
+        from sklearn.utils import shuffle
+
+        if 'index' not in df.columns:
+            raise ValueError('PySpark dataframe must contain "index" column to get slices.')
+
+        is_similar = True
+        importance_dict = {}
+
+        num_types = ['int', 'bigint', 'float', 'double']
+        num_cols = [col for col, data_type in df.dtypes if data_type in num_types]
+        if len(num_cols) == 0:
+            raise ValueError("Dataframe contains only non-numeric values.")
+
+        num_data = df.select(num_cols)
+
+        col_mins = num_data.agg(*[min_(col(column)).alias(f"{column}") for column in num_cols])
+        min_value = col_mins.select(least(*col_mins.columns)).collect()[0][0]
+        num_data = num_data.fillna(min_value - 1000)
+
+        try:
+            first_part = num_data.filter(
+                (to_date(col('index')) >= self._start_1) & (to_date(col('index')) < self._end_1)
+            ).withColumn('av_label', lit(0))
+
+            second_part = num_data.filter(
+                (to_date(col('index')) >= self._start_2) & (to_date(col('index')) < self._end_2)
+            ).withColumn('av_label', lit(1))
+        except TypeError:
+            print("Unable to get slices for specified params.")
+            raise
+
+        if first_part.count() == 0 or second_part.count() == 0:
+            raise ValueError("Values in slices should be values from dataframe index.")
+
+        data = first_part.union(second_part)
+        shuffled_data = np.array(shuffle(data.collect(), random_state=42))
+
+        X = shuffled_data[:, :-1]
+        y = shuffled_data[:, -1]
+
+        is_similar, importance_dict, score = self._compare_samples(X, y, num_cols)
+
+        return {
+            "similar": is_similar,
+            "importances": importance_dict,
+            "cv_roc_auc": score
+        }
 
     def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
         pass
