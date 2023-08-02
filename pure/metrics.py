@@ -7,11 +7,13 @@ from typing import Any, Dict, List, Tuple, Union
 import numpy as np
 import pandas as pd
 import pyspark.sql as ps
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_validate
+from sklearn.utils import shuffle
 
 from sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
-
+from psycopg2.extensions import AsIs
 
 @dataclass
 class Metric:
@@ -88,8 +90,10 @@ class CountTotal(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        query = f'SELECT COUNT(*) FROM {table_name};'
-        n = sql_connector.execute(query).fetchone()[0]
+        query = "select count(1) from %(table)s"
+        params = {'table': AsIs(table_name)}
+
+        n = sql_connector.exec_with_params(query, params).fetchone()[0]
 
         return {"total": n}
 
@@ -133,13 +137,21 @@ class CountZeros(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        query_k = f'SELECT COUNT(*) FROM {table_name} WHERE {self.column} = 0;'
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        query = '''
+            select count(1) as n,
+	            sum(case when %(column)s=0 then 1 else 0 end) as k
+            from %(table)s
+        '''
 
-        k = sql_connector.execute(query_k).fetchone()[0]
-        n = sql_connector.execute(query_n).fetchone()[0]
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column)
+        }
 
-        return {"total": n, "count": k, "delta": k / n}
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         zeroes = sql_connector.execute(
@@ -229,21 +241,29 @@ class CountNull(Metric):
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
         if self.aggregation == 'any':
-            statement = ' OR '.join(f'({col} IS NULL)' for col in self.columns)
+            cond = ' or '.join(f'{col} is null' for col in self.columns)
 
         elif self.aggregation == 'all':
-            statement = ' AND '.join(f'({col} IS NULL)' for col in self.columns)
+            cond = ' and '.join(f'{col} is null' for col in self.columns)
 
         else:
             raise ValueError("Unknown value for aggregation")
 
-        query_k = f'SELECT COUNT(*) FROM {table_name} WHERE {statement};'
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        query = '''
+            select count(1) as n,
+	            sum(case when %(cond)s then 1 else 0 end) as k
+            from %(table)s
+        '''
 
-        k = sql_connector.execute(query_k).fetchone()[0]
-        n = sql_connector.execute(query_n).fetchone()[0]
+        params = {
+            'table': AsIs(table_name),
+            'cond': AsIs(cond)
+        }
 
-        return {"total": n, "count": k, "delta": k / n}
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -314,24 +334,27 @@ class CountDuplicates(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        statement = ', '.join(f'{col}' for col in self.columns)
+        table_columns = ', '.join(f"{col}" for col in self.columns)
 
-        query_k = f'SELECT SUM(cnt - 1)::float FROM ( \
-                            SELECT {statement}, COUNT(*) as cnt \
-                            FROM {table_name} \
-                            GROUP BY {statement} \
-                            HAVING COUNT(*) > 1 \
-                            ) as duplicates;'
+        query = '''
+            with groups as (
+                select count(1) as n, count(1) - 1 as k
+                from %(table)s
+                group by %(columns)s
+            )
+            select sum(n) as n, sum(k) as k
+            from groups
+        '''
 
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        params = {
+            'table': AsIs(table_name),
+            'columns': AsIs(table_columns)
+        }
 
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
-
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         unique = sql_connector.execute(
@@ -390,16 +413,20 @@ class CountValue(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        query = '''
+            select count(1) as n,
+                sum(case when %(column)s=%(value)s then 1 else 0 end) as k
+            from %(table)s
+        '''
 
-        query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                  f"WHERE {self.column} = '{self.value}';"
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'value': self.value
+        }
 
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
-
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": k / n}
 
@@ -470,22 +497,25 @@ class CountBelowValue(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        if self.strict:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} < {self.value};'
-        else:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} <= {self.value};'
+        cmp_sign = '<' if self.strict else '<='
 
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        query = '''
+            select count(1) as n,
+                sum(case when %(column)s %(cmp)s %(value)s then 1 else 0 end) as k
+            from %(table)s
+        '''
 
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'cmp': AsIs(cmp_sign),
+            'value': self.value
+        }
 
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {df}").fetchone()[0]
@@ -560,20 +590,23 @@ class CountBelowColumn(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        if self.strict:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column_x} < {self.column_y};'
-        else:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column_x} <= {self.column_y};'
+        cmp_sign = '<' if self.strict else '<='
 
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        query = '''
+            select count(1) as n,
+                sum(case when %(column1)s %(cmp)s %(column2)s then 1 else 0 end) as k
+            from %(table)s
+        '''
 
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
+        params = {
+            'table': AsIs(table_name),
+            'column1': AsIs(self.column_x),
+            'column2': AsIs(self.column_y),
+            'cmp': AsIs(cmp_sign)
+        }
 
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": k / n}
 
@@ -655,22 +688,24 @@ class CountRatioBelow(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        if self.strict:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column_x}/{self.column_y} < {self.column_z}' \
-                      f' AND {self.column_y} != 0;'
-        else:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column_x}/{self.column_y} <= {self.column_z}' \
-                      f' AND {self.column_y} != 0;'
+        cmp_sign = '<' if self.strict else '<='
 
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        query = '''
+            select count(1) as n,
+                sum(case when %(col2)s != 0 and (%(col1)s / %(col2)s) %(cmp)s %(col3)s then 1 else 0 end) as k
+            from %(table)s
+        '''
 
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
+        params = {
+            'table': AsIs(table_name),
+            'col1': AsIs(self.column_x),
+            'col2': AsIs(self.column_y),
+            'col3': AsIs(self.column_z),
+            'cmp': AsIs(cmp_sign)
+        }
 
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": k / n}
 
@@ -746,16 +781,20 @@ class CountCB(Metric):
         lcb_per = alpha / 2
         ucb_per = 1 - alpha / 2
 
-        query_k = f'SELECT percentile_disc({lcb_per}) WITHIN GROUP ' \
-                  f'(ORDER BY {self.column}) AS p FROM {table_name};'
-        query_n = f'SELECT percentile_disc({ucb_per}) WITHIN GROUP ' \
-                  f'(ORDER BY {self.column}) AS p FROM {table_name};'
+        query = '''
+            select percentile_cont(array[%(lcb)s, %(ucb)s])
+                within group (order by %(column)s) as p
+            from %(table)s;
+        '''
 
-        sql_connector.execute(query_k)
-        lcb = sql_connector.conn.fetchone()[0]
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'lcb': lcb_per,
+            'ucb': ucb_per
+        }
 
-        sql_connector.execute(query_n)
-        ucb = sql_connector.conn.fetchone()[0]
+        lcb, ucb = sql_connector.exec_with_params(query, params).fetchone()[0]
 
         return {"lcb": lcb, "ucb": ucb}
 
@@ -823,22 +862,24 @@ class CountLag(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        query_today = "SELECT TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD');"
-        query_last = f"SELECT TO_CHAR({self.column}, 'YYYY-MM-DD') AS dt " \
-                     f'FROM {table_name} ORDER BY dt DESC LIMIT 1'
+        query = '''
+            select current_date as today, max(%(column)s)::date as last_day,
+	            current_date - max(%(column)s)::date as lag
+            from %(table)s;
+        '''
 
-        sql_connector.execute(query_today)
-        today = sql_connector.conn.fetchone()[0]
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column)
+        }
 
-        sql_connector.execute(query_last)
-        last_day = sql_connector.conn.fetchone()[0]
+        today, last_day, lag = sql_connector.exec_with_params(query, params).fetchone()
 
-        query_lag = f"SELECT '{today}'::DATE - '{last_day}'::DATE AS lag"
-
-        sql_connector.execute(query_lag)
-        lag = sql_connector.conn.fetchone()[0]
-
-        return {"today": today, "last_day": last_day, "lag": lag}
+        return {
+            "today": today.strftime(self.fmt),
+            "last_day": last_day.strftime(self.fmt),
+            "lag": lag
+        }
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         a = datetime.datetime.now()
@@ -890,14 +931,25 @@ class CountGreaterValue(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        if not self.strict:
-            ineq = ">="
-        else:
-            ineq = ">"
-        query = f"select count(*) from {table_name} where {self.column} {ineq} {self.value}"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        cmp_sign = '>' if self.strict else '>='
+
+        query = '''
+            select count(1) as n,
+                sum(case when %(column)s %(cmp)s %(value)s then 1 else 0 end) as k
+            from %(table)s
+        '''
+
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'cmp': AsIs(cmp_sign),
+            'value': self.value
+        }
+
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
@@ -977,17 +1029,23 @@ class CountValueInSet(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                  f'WHERE {self.column} IN {tuple(self.required_set)};'
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        query = '''
+            select count(1) as n,
+	            sum(case when %(column)s in %(set)s then 1 else 0 end) as k
+            from %(table)s;
+        '''
 
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'set': AsIs(tuple(self.required_set))
+        }
 
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
+
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -1075,25 +1133,27 @@ class CountValueInBounds(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        if self.strict:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} > {self.lower_bound} ' \
-                      f'AND {self.column} < {self.upper_bound};'
+        cmp_signs = ('>', '<') if self.strict else ('>=', '<=')
 
-        else:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} >= {self.lower_bound} ' \
-                      f'AND {self.column} <= {self.upper_bound};'
+        query = '''
+            select count(1) as n,
+	            sum(case when %(column)s %(cmp1)s %(val1)s and %(column)s %(cmp2)s %(val2)s then 1 else 0 end) as k
+            from %(table)s;
+        '''
 
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'cmp1': AsIs(cmp_signs[0]),
+            'val1': self.lower_bound,
+            'cmp2': AsIs(cmp_signs[1]),
+            'val2': self.upper_bound
+        }
 
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
-
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -1195,31 +1255,30 @@ class CountExtremeValuesFormula(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        query_mean = f'SELECT AVG({self.column}) FROM {table_name};'
-        sql_connector.execute(query_mean)
-        mean = sql_connector.conn.fetchone()[0]
+        signs = ('>', '+') if self.style == 'greater' else ('<', '-')
 
-        query_std = f'SELECT STDDEV({self.column}) FROM {table_name};'
-        sql_connector.execute(query_std)
-        std = sql_connector.conn.fetchone()[0]
+        query = '''
+            with stats as (
+                select avg(%(column)s) as mean, stddev(%(column)s) as std
+                from %(table)s
+            )
+            select count(1) as n,
+                sum(case when %(column)s %(sign1)s (mean %(sign2)s %(coeff)s*std) then 1 else 0 end) as k
+            from %(table)s t, stats st;
+        '''
 
-        if self.style == 'greater':
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} > {mean + std * self.std_coef};'
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'sign1': AsIs(signs[0]),
+            'sign2': AsIs(signs[1]),
+            'coeff': self.std_coef
+        }
 
-        else:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} < {mean - std * self.std_coef};'
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
-
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
-
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
-
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -1316,29 +1375,29 @@ class CountExtremeValuesQuantile(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        query_quantile = f'SELECT percentile_disc({self.q}) ' \
-                         f'WITHIN GROUP (ORDER BY {self.column}) AS p ' \
-                         f'FROM {table_name};'
-        sql_connector.execute(query_quantile)
-        quantile = sql_connector.conn.fetchone()[0]
+        cmp_sign = '>' if self.style == 'greater' else '<'
 
-        if self.style == 'greater':
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} > {quantile};'
+        query = '''
+            with stats as (
+                select percentile_disc(%(per)s) within group (order by %(column)s) as p
+                from %(table)s
+            )
+            select count(1) as n,
+                sum(case when t.%(column)s %(cmp)s st.p then 1 else 0 end) as k
+            from %(table)s t, stats st
+        '''
 
-        else:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} < {quantile};'
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'cmp': AsIs(cmp_sign),
+            'per': self.q,
+        }
 
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
+        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        delta = 0 if n == 0 else k / n
 
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
-
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
-
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -1458,7 +1517,36 @@ class CountLastDayRows(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        pass
+        query = '''
+            with groups as (
+                select %(column)s::date, count(1) as qty, row_number() over w as x
+                from %(table)s
+                group by %(column)s::date
+                window w as (
+                    order by %(column)s::date desc
+                )
+            )
+            select sum(case when x != 1 then qty else 0 end) /
+                sum(case when x != 1 then 1 else 0 end) as average,
+                max(case when x =1 then qty else 0 end) as last_day_count
+            from groups
+        '''
+
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column)
+        }
+
+        average, last_date_count = sql_connector.exec_with_params(query, params).fetchone()
+        percentage = (last_date_count / float(average)) * 100
+        at_least = percentage >= self.percent
+
+        return {
+            "average": float(average),
+            "last_date_count": last_date_count,
+            "percentage": percentage,
+            f"at_least_{self.percent}%": at_least,
+        }
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         last_date_count = sql_connector.execute(
@@ -1553,8 +1641,37 @@ class CountFewLastDayRows(Metric):
     def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
         pass
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(self, table_name: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        query = '''
+            with groups as (
+                select %(column)s::date, count(1) as qty, row_number() over w as x
+                from %(table)s
+                group by %(column)s::date
+                window w as (
+                    order by %(column)s::date desc
+                )
+            ),
+            stats as (
+                select avg(qty) as mean
+                from groups
+                where x > %(days)s
+            )
+            select max(st.mean) as average,
+                sum(case when (g.qty / st.mean) >= %(percent)s then 1 else 0 end) as days
+            from groups g, stats st
+            where x <= %(days)s
+        '''
+
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'days': self.number,
+            'percent': self.percent / 100
+        }
+
+        average, days = sql_connector.exec_with_params(query, params).fetchone()
+
+        return {"average": float(average), "days": days}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         avg_rows_number = sql_connector.execute(
@@ -1591,6 +1708,9 @@ class CheckAdversarialValidation(Metric):
     """Apply adversarial validation technic.
 
     Define indexes for first and second slices.
+    To get slices of initial dataset uses indexes for pandas dataframe
+    otherwise values from specified column.
+
     For given slices of data apply adversarial technic
     to check if distributions of slices are the same or not.
     If there is a doubt about first slice being
@@ -1605,6 +1725,7 @@ class CheckAdversarialValidation(Metric):
     first_slice: tuple
     second_slice: tuple
     eps: float = 0.05
+    column: str = "index"
 
     def __post_init__(self):
         if len(self.first_slice) != 2 or len(self.second_slice) != 2:
@@ -1622,7 +1743,12 @@ class CheckAdversarialValidation(Metric):
 
     def _compare_samples(self, X: np.ndarray, y: np.ndarray, columns: List[str]) ->\
         Tuple[bool, Dict[str, float], float]:
-        """Return roc_auc_score for binary classification and feature importances."""
+        """
+        Determines how successfully the binary classification model
+        separates the elements of the training and test samples.
+
+        Returns averaged roc_auc_score and feature importances for 5-folds cv.
+        """
 
         is_similar = True
         importance_dict = {}
@@ -1677,10 +1803,9 @@ class CheckAdversarialValidation(Metric):
 
     def _call_pyspark(self, df: pd.DataFrame) -> Dict[str, Any]:
         from pyspark.sql.functions import col, to_date, lit, least, min as min_
-        from sklearn.utils import shuffle
 
-        if 'index' not in df.columns:
-            raise ValueError('PySpark dataframe must contain "index" column to get slices.')
+        if self.column not in df.columns:
+            raise ValueError(f'Dataframe must contain "{self.column}" column to get slices.')
 
         is_similar = True
         importance_dict = {}
@@ -1698,18 +1823,18 @@ class CheckAdversarialValidation(Metric):
 
         try:
             first_part = num_data.filter(
-                (to_date(col('index')) >= self._start_1) & (to_date(col('index')) < self._end_1)
+                (to_date(col(self.column)) >= self._start_1) & (to_date(col(self.column)) < self._end_1)
             ).withColumn('av_label', lit(0))
 
             second_part = num_data.filter(
-                (to_date(col('index')) >= self._start_2) & (to_date(col('index')) < self._end_2)
+                (to_date(col(self.column)) >= self._start_2) & (to_date(col(self.column)) < self._end_2)
             ).withColumn('av_label', lit(1))
         except TypeError:
-            print("Unable to get slices for specified params.")
+            print(f"Unable to get slices for column {self.column}.")
             raise
 
         if first_part.count() == 0 or second_part.count() == 0:
-            raise ValueError("Values in slices should be values from dataframe index.")
+            raise ValueError(f"Values in slices should be values from column {self.column}.")
 
         data = first_part.union(second_part)
         shuffled_data = np.array(shuffle(data.collect(), random_state=42))
@@ -1728,8 +1853,69 @@ class CheckAdversarialValidation(Metric):
     def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
         pass
 
-    def _call_postgresql(self, df: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        pass
+    def _call_postgresql(self, table_name: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        query_num_cols = '''
+            select string_agg(column_name, ',') as num_columns
+            from information_schema.columns
+            where table_name=%(table)s and column_name != %(index_col)s and
+                data_type in ('smallint', 'integer', 'bigint', 'decimal', 'numeric', 'real', 'double precision')
+        '''
+
+        params = {
+            'table': table_name,
+            'index_col': self.column
+        }
+
+        num_cols = sql_connector.exec_with_params(query_num_cols, params).fetchone()[0]
+
+        if num_cols is None:
+            raise ValueError(f'Table "{table_name}" contains only non-numeric values.')
+
+        coalesce_cols = [f"coalesce({col}, m.min)::float as {col}" for col in  num_cols.split(',')]
+
+        query_final = '''
+            with global_min as (
+                select min(least(%(num_columns)s)) - 1000 as min
+                from %(table)s
+            )
+            select %(coalesce_columns)s,
+                case when (%(index_col)s >= %(start1)s and %(index_col)s <= %(end1)s) then 0 else 1 end as av_label
+            from %(table)s t, global_min m
+            where (%(index_col)s >= %(start1)s and %(index_col)s <= %(end1)s) or
+                (%(index_col)s >= %(start2)s and %(index_col)s <= %(end2)s)
+            order by %(index_col)s
+        '''
+
+        params = {
+            'table': AsIs(table_name),
+            'index_col': AsIs(self.column),
+            'num_columns': AsIs(num_cols),
+            'coalesce_columns': AsIs(', '.join(coalesce_cols)),
+            'start1': self._start_1,
+            'end1': self._end_1,
+            'start2': self._start_2,
+            'end2': self._end_2
+        }
+
+        data = np.array(sql_connector.exec_with_params(query_final, params).fetchall())
+
+        first_part_size = np.sum(data[:, -1] == 0)
+        second_part_size = np.sum(data[:, -1] == 1)
+
+        if first_part_size == 0 or second_part_size == 0:
+            raise ValueError(f"Values in slices should be values from column {self.column}.")
+
+        shuffled_data = shuffle(data, random_state=42)
+        X = shuffled_data[:, :-1]
+        y = shuffled_data[:, -1]
+
+        is_similar, importance_dict, score = self._compare_samples(X, y, num_cols.split(','))
+
+        return {
+            "similar": is_similar,
+            "importances": importance_dict,
+            "cv_roc_auc": score
+        }
 
     def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         pass
