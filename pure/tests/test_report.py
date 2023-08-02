@@ -4,7 +4,7 @@ import pickle
 import pandas as pd
 from test_fixtures.report_cases import TEST_CASES as report_cases
 
-from pure.report import Report
+from report import Report
 
 
 def test_report_pandas():

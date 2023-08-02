@@ -1,8 +1,8 @@
 """Connection initializers for SQL engines"""
 
-from typing import Any, Dict, Union, List
+from typing import Any, Dict
 from abc import ABC, abstractmethod
-from clickhouse_driver import Client
+import clickhouse_driver
 import psycopg2
 import pyodbc
 
@@ -38,20 +38,31 @@ class ClickHouseConnector(SQLConnector):
         super().__init__(host, port, user, password)
 
     def connect(self):
-        self.conn = Client(
+        self.connection = clickhouse_driver.connect(
             host=self.host,
             port=self.port,
             user=self.user,
-            password=self.password,
-            settings={'use_numpy': True}
+            password=self.password
         )
+
+        self.cursor = self.connection.cursor()
+
         return self
 
-    def execute(self, query):
-        return self.conn.execute(query)
+    def execute(self, query, params: Dict[str, Any] = None):
+        try:
+            self.cursor.execute(query, params)
+            return self.cursor.fetchall()
+        except Exception as err:
+            print("Error executing query: ", str(err))
+            raise
 
     def close(self):
-        return self.conn.disconnect_connection()
+        if self.cursor:
+            self.cursor.close()
+
+        if self.connection:
+            self.connection.close()
 
 
 class PostgreSQLConnector(SQLConnector):
@@ -60,32 +71,34 @@ class PostgreSQLConnector(SQLConnector):
         super().__init__(host, port, user, password, database)
 
     def connect(self):
-        self.conn = psycopg2.connect(
+        self.connection = psycopg2.connect(
             user=self.user,
             password=self.password,
             host=self.host,
             port=self.port,
             database=self.database
-        ).cursor()
+        )
+
+        self.cursor = self.connection.cursor()
 
         return self
 
-    def execute(self, query):
-        self.conn.execute(query)
-        return self.conn
-
-    def exec_with_params(self, query: str, params: Dict[str, Any]):
+    def execute(self, query: str, params: Dict[str, Any] = None):
         try:
-            self.conn.execute(query, params)
+            self.cursor.execute(query, params)
         except Exception as err:
-            self.conn.connection.rollback()
+            self.connection.rollback()
             print("An exception has occured: ", err)
             raise
 
-        return self.conn
+        return self.cursor
 
     def close(self):
-        return self.conn.close()
+        if self.cursor:
+            self.cursor.close()
+
+        if self.connection:
+            self.connection.close()
 
 
 class MSSQLConnector(SQLConnector):
