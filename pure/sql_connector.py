@@ -4,7 +4,7 @@ from typing import Any, Dict
 from abc import ABC, abstractmethod
 import clickhouse_driver
 import psycopg2
-import pyodbc
+import pymssql
 
 
 class SQLConnector(ABC):
@@ -107,18 +107,29 @@ class MSSQLConnector(SQLConnector):
         super().__init__(host, port, user, password, database)
 
     def connect(self):
-        self.conn = pyodbc.connect(
-            "DRIVER={ODBC Driver 17 for SQL Server};"
-            f"SERVER={self.host};"
-            f"DATABASE={self.database};"
-            f"UID={self.user};"
-            f"PWD={self.password}"
-        ).cursor()
+        self.connection = pymssql.connect(
+            server=self.host,
+            port=self.port,
+            database=self.database,
+            user=self.user,
+            password=self.password
+        )
+
+        self.cursor = self.connection.cursor()
 
         return self
 
-    def execute(self, query):
-        return self.conn.execute(query)
+    def execute(self, query, params: Dict[str, Any] = None):
+        try:
+            self.cursor.execute(query, params)
+            return self.cursor.fetchall()
+        except Exception as err:
+            print("Error executing query: ", str(err))
+            raise
 
     def close(self):
-        return self.conn.close()
+        if self.cursor:
+            self.cursor.close()
+
+        if self.connection:
+            self.connection.close()
