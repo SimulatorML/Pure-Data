@@ -13,7 +13,7 @@ from sklearn.model_selection import cross_validate
 from sklearn.utils import shuffle
 
 from sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
-from psycopg2.extensions import AsIs
+
 
 @dataclass
 class Metric:
@@ -82,7 +82,9 @@ class CountTotal(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
+        query = f"select count(1) from {table_name}"
+        n = sql_connector.execute(query)[0][0]
+
         return {"total": n}
 
     def _call_postgresql(
@@ -90,10 +92,12 @@ class CountTotal(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         query = "select count(1) from %(table)s"
         params = {'table': AsIs(table_name)}
 
-        n = sql_connector.exec_with_params(query, params).fetchone()[0]
+        n = sql_connector.execute(query, params).fetchone()[0]
 
         return {"total": n}
 
@@ -128,15 +132,24 @@ class CountZeros(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        k = sql_connector.execute(f"select countIf({self.column} = 0) from {table_name}")[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        query = f'''
+            select count(1) as n,
+                count(1) filter(where {self.column}=0) as k
+            from {table_name}
+        '''
+
+        n, k = sql_connector.execute(query)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         query = '''
             select count(1) as n,
 	            sum(case when %(column)s=0 then 1 else 0 end) as k
@@ -148,7 +161,7 @@ class CountZeros(Metric):
             'column': AsIs(self.column)
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -214,32 +227,29 @@ class CountNull(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        if self.aggregation == "all":
-            sep = "and"
-        elif self.aggregation == "any":
-            sep = "or"
-        else:
-            raise ValueError("Unknown value for aggregation")
-        try:
-            columns_null = f") {sep} (".join(f'isNaN({col})' for col in self.columns)
-            query = f"select count(*) from {table_name} where ({columns_null})"
-            k = sql_connector.execute(query)[0][0]
-            return {"total": n, "count": k, "delta": k / n}
-        except Exception as e:
-            # check values to be NULL or zero length
-            columns_null = f") {sep} (".join(f'isNull({col})' for col in self.columns)
-            zero_length = f") {sep} (".join(f"length({col}) = 0" for col in self.columns)
-            query = f"select count(*) from {table_name} where ({columns_null})"
-            query_zero = f"select count(*) from {table_name} where ({zero_length})"
-            k = sql_connector.execute(query)[0][0] + sql_connector.execute(query_zero)[0][0]
-            return {"total": n, "count": k, "delta": k / n}
+        if self.aggregation == 'any':
+            cond = ' or '.join(f'{col} is null' for col in self.columns)
+        elif self.aggregation == 'all':
+            cond = ' and '.join(f'{col} is null' for col in self.columns)
+
+        query = f'''
+            select count(1) as n,
+	            count(1) filter(where {cond}) as k
+            from {table_name}
+        '''
+
+        n, k = sql_connector.execute(query)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         if self.aggregation == 'any':
             cond = ' or '.join(f'{col} is null' for col in self.columns)
 
@@ -260,7 +270,7 @@ class CountNull(Metric):
             'cond': AsIs(cond)
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -318,22 +328,29 @@ class CountDuplicates(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        table_columns = ','.join(f"{col}" for col in self.columns)
-        subquery = f"select count(*) - 1 as duplicates_count" \
-                   f" from {table_name} " \
-                   f"group by {table_columns}" \
-                   f" having " \
-                   f"duplicates_count > 0 "
-        query = f"SELECT SUM(duplicates_count) AS total_duplicates_count from ({subquery}) subquery"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        table_columns = ', '.join(f"{col}" for col in self.columns)
+
+        query = f'''
+            with groups as (
+                select count(1) as n, count(1) - 1 as k
+                from {table_name}
+                group by {table_columns}
+            )
+            select sum(n) as n, sum(k) as k
+            from groups
+        '''
+        n, k = sql_connector.execute(query)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         table_columns = ', '.join(f"{col}" for col in self.columns)
 
         query = '''
@@ -351,7 +368,7 @@ class CountDuplicates(Metric):
             'columns': AsIs(table_columns)
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -378,7 +395,7 @@ class CountValue(Metric):
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
-        k = sum(df[self.column] == self.value)
+        k = np.sum(df[self.column] == self.value)
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
@@ -393,26 +410,26 @@ class CountValue(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        try:
-            query = f"select count(*)" \
-                    f" from {table_name}" \
-                    f" where toDate({self.column}) = toDate('{self.value}')"
-            k = sql_connector.execute(query)[0][0]
-            return {"total": n, "count": k, "delta": k / n}
-        except Exception as e:
-            try:
-                query = f"select count(*) from {table_name} where {self.column} = {self.value}"
-                k = sql_connector.execute(query)[0][0]
-                return {"total": n, "count": k, "delta": k / n}
-            except Exception as e:
-                print(e)
+        query = f'''
+            select count(1) as n,
+                count(1) filter(where {self.column} = %(value)s) as k
+            from {table_name}
+        '''
+
+        params = {'value': self.value}
+
+        n, k = sql_connector.execute(query, params)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         query = '''
             select count(1) as n,
                 sum(case when %(column)s=%(value)s then 1 else 0 end) as k
@@ -425,10 +442,10 @@ class CountValue(Metric):
             'value': self.value
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -483,20 +500,28 @@ class CountBelowValue(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        if not self.strict:
-            ineq = "<="
-        else:
-            ineq = "<"
-        query = f"select count(*) from {table_name} where {self.column} {ineq} {self.value}"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        cmp_sign = '<' if self.strict else '<='
+
+        query = f'''
+            select count(1) as n,
+                count(1) filter(where {self.column} {cmp_sign} %(value)s) as k
+            from {table_name}
+        '''
+
+        params = {'value': self.value}
+
+        n, k = sql_connector.execute(query, params)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         cmp_sign = '<' if self.strict else '<='
 
         query = '''
@@ -512,24 +537,24 @@ class CountBelowValue(Metric):
             'value': self.value
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
-        total = sql_connector.execute(f"SELECT COUNT(*) FROM {df}").fetchone()[0]
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
         if self.strict:
             value = sql_connector.execute(
                 f"SELECT COUNT({self.column}) "
-                f"FROM {df} "
+                f"FROM {table_name} "
                 f"WHERE {self.column} < {self.value}"
             ).fetchone()[0]
         else:
             value = sql_connector.execute(
                 f"SELECT COUNT({self.column}) "
-                f"FROM {df} "
+                f"FROM {table_name} "
                 f"WHERE {self.column} <= {self.value}"
             ).fetchone()[0]
 
@@ -576,20 +601,25 @@ class CountBelowColumn(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        if not self.strict:
-            ineq = "<="
-        else:
-            ineq = "<"
-        query = f"select count(*) from {table_name} where {self.column_x} {ineq} {self.column_y}"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        cmp_sign = '<' if self.strict else '<='
+
+        query = f'''
+            select count(1) as n,
+                count(1) filter(where {self.column_x} {cmp_sign} {self.column_y}) as k
+            from {table_name}
+        '''
+        n, k = sql_connector.execute(query)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         cmp_sign = '<' if self.strict else '<='
 
         query = '''
@@ -605,10 +635,10 @@ class CountBelowColumn(Metric):
             'cmp': AsIs(cmp_sign)
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -672,22 +702,27 @@ class CountRatioBelow(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        if not self.strict:
-            ineq = "<="
-        else:
-            ineq = "<"
-        query = f"select count(*)" \
-                f" from {table_name}" \
-                f" where {self.column_x} / {self.column_y} {ineq} {self.column_z}"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        cmp_sign = '<' if self.strict else '<='
+
+        query = f'''
+            select count(1) as n,
+                count(1) filter(where {self.column_y} != 0 and
+                    ({self.column_x} / {self.column_y}) {cmp_sign} {self.column_z}) as k
+            from {table_name}
+        '''
+
+        n, k = sql_connector.execute(query)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         cmp_sign = '<' if self.strict else '<='
 
         query = '''
@@ -704,10 +739,10 @@ class CountRatioBelow(Metric):
             'cmp': AsIs(cmp_sign)
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
-        return {"total": n, "count": k, "delta": k / n}
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -764,12 +799,21 @@ class CountCB(Metric):
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
         alpha = 1 - self.conf
-        lcb = sql_connector.execute(f"select quantileExact({alpha / 2})({self.column})"
-                                    f" from {table_name}"
-                                    )[0][0]
-        ucb = sql_connector.execute(
-            f"select quantileExact({alpha / 2 + self.conf})({self.column}) from {table_name}"
-        )[0][0]
+        lcb_per = alpha / 2
+        ucb_per = 1 - alpha / 2
+
+        query = f'''
+            select quantiles(%(lcb)s, %(ucb)s)(revenue) as qv
+            from {table_name}
+        '''
+
+        params = {
+            'lcb': lcb_per,
+            'ucb': ucb_per
+        }
+
+        lcb, ucb = sql_connector.execute(query, params)[0][0]
+
         return {"lcb": lcb, "ucb": ucb}
 
     def _call_postgresql(
@@ -777,6 +821,8 @@ class CountCB(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         alpha = 1 - self.conf
         lcb_per = alpha / 2
         ucb_per = 1 - alpha / 2
@@ -794,7 +840,7 @@ class CountCB(Metric):
             'ucb': ucb_per
         }
 
-        lcb, ucb = sql_connector.exec_with_params(query, params).fetchone()[0]
+        lcb, ucb = sql_connector.execute(query, params).fetchone()[0]
 
         return {"lcb": lcb, "ucb": ucb}
 
@@ -833,10 +879,10 @@ class CountLag(Metric):
         return {"today": a, "last_day": b, "lag": lag}
 
     def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, max
+        from pyspark.sql.functions import col, max as max_
 
         a = datetime.datetime.now()
-        b = df.select(max(col(self.column))).collect()[0][0]
+        b = df.select(max_(col(self.column))).collect()[0][0]
         b = datetime.datetime.strptime(b, "%Y-%m-%d")
 
         lag = (a - b).days
@@ -849,19 +895,28 @@ class CountLag(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        today = sql_connector.execute(f"select today()")[0][0]
-        query = f"select toDate({self.column}) as dt from {table_name} order by dt desc limit 1"
-        last_day = sql_connector.execute(query)[0][0]
-        lag = sql_connector.execute(
-            f"select dateDiff('day', toDate('{last_day}'), toDate('{today}'))"
-        )[0][0]
-        return {"today": str(today), "last_day": str(last_day), "lag": lag}
+        query = f'''
+            select today() as today,
+                max({self.column})::date as last_day,
+                dateDiff('day', max({self.column})::date, today()) as lag
+            from {table_name}
+        '''
+
+        today, last_day, lag = sql_connector.execute(query)[0]
+
+        return {
+            "today": today.strftime(self.fmt),
+            "last_day": last_day.strftime(self.fmt),
+            "lag": lag
+        }
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         query = '''
             select current_date as today, max(%(column)s)::date as last_day,
 	            current_date - max(%(column)s)::date as lag
@@ -873,7 +928,7 @@ class CountLag(Metric):
             'column': AsIs(self.column)
         }
 
-        today, last_day, lag = sql_connector.exec_with_params(query, params).fetchone()
+        today, last_day, lag = sql_connector.execute(query, params).fetchone()
 
         return {
             "today": today.strftime(self.fmt),
@@ -933,6 +988,28 @@ class CountGreaterValue(Metric):
     ) -> Dict[str, Any]:
         cmp_sign = '>' if self.strict else '>='
 
+        query = f'''
+            select count(1) as n,
+                count(1) filter (where {self.column} {cmp_sign} %(value)s) as k
+            from {table_name}
+        '''
+
+        params = {'value': self.value}
+
+        n, k = sql_connector.execute(query, params)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
+
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
+        cmp_sign = '>' if self.strict else '>='
+
         query = '''
             select count(1) as n,
                 sum(case when %(column)s %(cmp)s %(value)s then 1 else 0 end) as k
@@ -946,32 +1023,10 @@ class CountGreaterValue(Metric):
             'value': self.value
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
-
-    def _call_postgresql(
-            self,
-            table_name: str,
-            sql_connector: PostgreSQLConnector
-    ) -> Dict[str, Any]:
-        if self.strict:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} > {self.value};'
-        else:
-            query_k = f'SELECT COUNT(*) FROM {table_name} ' \
-                      f'WHERE {self.column} >= {self.value};'
-
-        query_n = f'SELECT COUNT(*) FROM {table_name};'
-
-        sql_connector.execute(query_k)
-        k = sql_connector.conn.fetchone()[0]
-
-        sql_connector.execute(query_n)
-        n = sql_connector.conn.fetchone()[0]
-
-        return {"total": n, "count": k, "delta": k / n}
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         total = sql_connector.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -1019,16 +1074,24 @@ class CountValueInSet(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        query = f"select countIf({self.column} in {self.required_set}) as cnt from {table_name}"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        query = f'''
+            select count(1) as n,
+	            count(1) filter(where {self.column} in {tuple(self.required_set)}) as k
+            from {table_name};
+        '''
+
+        n, k = sql_connector.execute(query)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         query = '''
             select count(1) as n,
 	            sum(case when %(column)s in %(set)s then 1 else 0 end) as k
@@ -1041,7 +1104,7 @@ class CountValueInSet(Metric):
             'set': AsIs(tuple(self.required_set))
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1118,26 +1181,38 @@ class CountValueInBounds(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        if not self.strict:
-            ineq_1, ineq_2 = ">=", "<="
-        else:
-            ineq_1, ineq_2 = ">", "<"
-        query = f"select countIf({self.column} {ineq_1} {self.lower_bound} and " \
-                f"{self.column} {ineq_2} {self.upper_bound}) as cnt from {table_name}"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        cmp_signs = ('>', '<') if self.strict else ('>=', '<=')
+
+        query = f'''
+            select count(1) as n,
+	            count(1) filter(where {self.column} {cmp_signs[0]} %(val1)s and
+                    {self.column} {cmp_signs[1]} %(val2)s) as k
+            from {table_name};
+        '''
+
+        params = {
+            'val1': self.lower_bound,
+            'val2': self.upper_bound
+        }
+
+        n, k = sql_connector.execute(query, params)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         cmp_signs = ('>', '<') if self.strict else ('>=', '<=')
 
         query = '''
             select count(1) as n,
-	            sum(case when %(column)s %(cmp1)s %(val1)s and %(column)s %(cmp2)s %(val2)s then 1 else 0 end) as k
+	            sum(case when %(column)s %(cmp1)s %(val1)s and
+                    %(column)s %(cmp2)s %(val2)s then 1 else 0 end) as k
             from %(table)s;
         '''
 
@@ -1150,7 +1225,7 @@ class CountValueInBounds(Metric):
             'val2': self.upper_bound
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1233,28 +1308,31 @@ class CountExtremeValuesFormula(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        sub_query = f"select {self.column} from {table_name} where isFinite({self.column})"
-        mean = sql_connector.execute(f"select avg({self.column}) from ({sub_query})")[0][0]
-        std = sql_connector.execute(
-            f"select stddevPopStable({self.column}) from ({sub_query})"
-        )[0][0]
-        if self.style == "greater":
-            query = f"select count(*)" \
-                    f" from ({sub_query})" \
-                    f" where {self.column} > {mean + std * self.std_coef}"
-        else:
-            query = f"select count(*)" \
-                    f" from ({sub_query})" \
-                    f" where {self.column} < {mean - std * self.std_coef}"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        signs = ('>', '+') if self.style == 'greater' else ('<', '-')
+
+        query = f'''
+            with stats as (
+                select avg({self.column}) as mean, stddevPopStable({self.column}) as std
+                from {table_name}
+            )
+            select count(1) as n,
+                count(1) filter(where {self.column} {signs[0]} (st.mean {signs[1]} %(coeff)s*st.std)) as k
+            from sales t, stats st;
+        '''
+        params = {'coeff': self.std_coef}
+
+        n, k = sql_connector.execute(query, params)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         signs = ('>', '+') if self.style == 'greater' else ('<', '-')
 
         query = '''
@@ -1263,7 +1341,7 @@ class CountExtremeValuesFormula(Metric):
                 from %(table)s
             )
             select count(1) as n,
-                sum(case when %(column)s %(sign1)s (mean %(sign2)s %(coeff)s*std) then 1 else 0 end) as k
+                sum(case when %(column)s %(sign1)s (st.mean %(sign2)s %(coeff)s*st.std) then 1 else 0 end) as k
             from %(table)s t, stats st;
         '''
 
@@ -1275,7 +1353,7 @@ class CountExtremeValuesFormula(Metric):
             'coeff': self.std_coef
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1358,23 +1436,32 @@ class CountExtremeValuesQuantile(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        n = sql_connector.execute(f"select count(*) from {table_name}")[0][0]
-        sub_query = f"select {self.column} from {table_name} where isFinite({self.column})"
-        quantile = sql_connector.execute(
-            f"select quantileExact({self.q})({self.column}) from ({sub_query})"
-        )[0][0]
-        if self.style == "greater":
-            query = f"select count(*) from ({sub_query}) where {self.column} > {quantile}"
-        else:
-            query = f"select count(*) from ({sub_query}) where {self.column} < {quantile}"
-        k = sql_connector.execute(query)[0][0]
-        return {"total": n, "count": k, "delta": k / n}
+        cmp_sign = '>' if self.style == 'greater' else '<'
+
+        query = f'''
+            with stats as (
+                select quantile(%(per)s)({self.column}) as qv
+                from {table_name}
+            )
+            select count(1) as n,
+                count(1) filter(where t.{self.column} {cmp_sign} st.qv) as k
+            from {table_name} t, stats st
+        '''
+
+        params = {'per': self.q}
+
+        n, k = sql_connector.execute(query, params)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
             self,
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         cmp_sign = '>' if self.style == 'greater' else '<'
 
         query = '''
@@ -1394,7 +1481,7 @@ class CountExtremeValuesQuantile(Metric):
             'per': self.q,
         }
 
-        n, k = sql_connector.exec_with_params(query, params).fetchone()
+        n, k = sql_connector.execute(query, params).fetchone()
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1484,29 +1571,26 @@ class CountLastDayRows(Metric):
             table_name: str,
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
-        at_least = False
+        query = f'''
+            with groups as (
+                select {self.column}::date, count(1) as qty, row_number() over w as x
+                from {table_name}
+                group by {self.column}::date
+                window w as (
+                    order by {self.column}::date desc
+                )
+            )
+            select sum(qty) filter(where x != 1) / count(1) filter(where x != 1) as average,
+                max(qty) filter(where x = 1) as last_day_count
+            from groups
+        '''
 
-        query_last_day = f"select toDate({self.column}) as dt" \
-                         f" from {table_name} " \
-                         f"order by dt desc limit 1"
-        last_day = sql_connector.execute(query_last_day)[0][0]
-        subquery = f"select {self.column}" \
-                   f" from {table_name}" \
-                   f" where {self.column} != toDate('{last_day}')"
+        average, last_date_count = sql_connector.execute(query)[0]
+        percentage = (last_date_count / float(average)) * 100
+        at_least = percentage >= self.percent
 
-        n_rows_without_last = sql_connector.execute(f"select count(*) from ({subquery})")[0][0]
-        n_days_without_last = sql_connector.execute(
-            f"select countDistinct(toDate({self.column})) from ({subquery})")[0][0]
-        average = n_rows_without_last / n_days_without_last
-
-        last_date_count = sql_connector.execute(
-            f"select count(*) from {table_name} where {self.column} = toDate('{last_day}')")[0][0]
-
-        percentage = (last_date_count / average) * 100
-        if percentage >= self.percent:
-            at_least = True
         return {
-            "average": average,
+            "average": float(average),
             "last_date_count": last_date_count,
             "percentage": percentage,
             f"at_least_{self.percent}%": at_least,
@@ -1517,6 +1601,8 @@ class CountLastDayRows(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         query = '''
             with groups as (
                 select %(column)s::date, count(1) as qty, row_number() over w as x
@@ -1528,7 +1614,7 @@ class CountLastDayRows(Metric):
             )
             select sum(case when x != 1 then qty else 0 end) /
                 sum(case when x != 1 then 1 else 0 end) as average,
-                max(case when x =1 then qty else 0 end) as last_day_count
+                max(case when x = 1 then qty else 0 end) as last_day_count
             from groups
         '''
 
@@ -1537,7 +1623,7 @@ class CountLastDayRows(Metric):
             'column': AsIs(self.column)
         }
 
-        average, last_date_count = sql_connector.exec_with_params(query, params).fetchone()
+        average, last_date_count = sql_connector.execute(query, params).fetchone()
         percentage = (last_date_count / float(average)) * 100
         at_least = percentage >= self.percent
 
@@ -1638,10 +1724,43 @@ class CountFewLastDayRows(Metric):
 
         return {"average": average, "days": k}
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(
+        self,
+        table_name: str,
+        sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        query = f'''
+            with groups as (
+                select {self.column}::date, count(1) as qty, row_number() over w as x
+                from {table_name}
+                group by {self.column}::date
+                window w as (
+                    order by {self.column}::date desc
+                )
+            ),
+            stats as (
+                select avg(qty) as mean
+                from groups
+                where x > %(days)s
+            )
+            select max(st.mean) as average,
+                sum(case when (g.qty / st.mean) >= %(percent)s then 1 else 0 end) as days
+            from groups g, stats st
+            where x <= %(days)s
+        '''
+
+        params = {
+            'days': self.number,
+            'percent': self.percent / 100
+        }
+
+        average, days = sql_connector.execute(query, params)[0]
+
+        return {"average": float(average), "days": days}
 
     def _call_postgresql(self, table_name: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         query = '''
             with groups as (
                 select %(column)s::date, count(1) as qty, row_number() over w as x
@@ -1669,7 +1788,7 @@ class CountFewLastDayRows(Metric):
             'percent': self.percent / 100
         }
 
-        average, days = sql_connector.exec_with_params(query, params).fetchone()
+        average, days = sql_connector.execute(query, params).fetchone()
 
         return {"average": float(average), "days": days}
 
@@ -1776,8 +1895,8 @@ class CheckAdversarialValidation(Metric):
         try:
             first_part = num_data.loc[self._start_1 : self._end_1, :]
             second_part = num_data.loc[self._start_2 : self._end_2, :]
-        except TypeError:
-            print("Unable to get slices for specified params")
+        except TypeError as err:
+            print(f"Unable to get slices: {err.args}.")
             raise
 
         if len(first_part) == 0 or len(second_part) == 0:
@@ -1850,10 +1969,75 @@ class CheckAdversarialValidation(Metric):
             "cv_roc_auc": score
         }
 
-    def _call_clickhouse(self, df: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
-        pass
+    def _call_clickhouse(self, table_name: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+        query_num_cols = '''
+            select groupArray(column_name) as num_columns
+            from information_schema.columns
+            where table_name=%(table)s and column_name != %(index_col)s and
+                data_type in (
+                    'UInt8', 'UInt16', 'UInt32', 'UInt64', 'UInt128', 'UInt256',
+                    'Int8', 'Int16', 'Int32', 'Int64', 'Int128', 'Int256', 'Float32', 'Float64', 'Decimal',
+                    'Nullable(UInt8)', 'Nullable(UInt16)', 'Nullable(UInt32)', 'Nullable(UInt64)', 'Nullable(UInt128)', 'Nullable(UInt256)',
+                    'Nullable(Int8)', 'Nullable(Int16)', 'Nullable(Int32)', 'Nullable(Int64)', 'Nullable(Int128)', 'Nullable(Int256)',
+                    'Nullable(Float32)', 'Nullable(Float64)', 'Nullable(Decimal)'
+                )
+        '''
+
+        params = {
+            'table': table_name,
+            'index_col': self.column
+        }
+
+        num_cols = sql_connector.execute(query_num_cols, params)[0][0]
+
+        if num_cols is None:
+            raise ValueError(f'Table "{table_name}" contains only non-numeric values.')
+
+        coalesce_cols = [f"coalesce(t.{col}, m.min) as {col}" for col in  num_cols]
+
+        query_final = f'''
+            with global_min as (
+                select min(least({', '.join(num_cols)})) - 1000 as min
+                from {table_name}
+            )
+            select {', '.join(coalesce_cols)},
+                case when ({self.column} >= %(start1)s and {self.column} < %(end1)s) then 0 else 1 end as av_label
+            from {table_name} t, global_min m
+            where ({self.column} >= %(start1)s and {self.column} < %(end1)s) or
+                ({self.column} >= %(start2)s and {self.column} < %(end2)s)
+            order by {self.column}
+        '''
+
+        params = {
+            'start1': self._start_1,
+            'end1': self._end_1,
+            'start2': self._start_2,
+            'end2': self._end_2
+        }
+
+        data = np.array(sql_connector.execute(query_final, params))
+
+        first_part_size = np.sum(data[:, -1] == 0)
+        second_part_size = np.sum(data[:, -1] == 1)
+
+        if first_part_size == 0 or second_part_size == 0:
+            raise ValueError(f"Values in slices should be values from column {self.column}.")
+
+        shuffled_data = shuffle(data, random_state=42)
+        X = shuffled_data[:, :-1]
+        y = shuffled_data[:, -1]
+
+        is_similar, importance_dict, score = self._compare_samples(X, y, num_cols)
+
+        return {
+            "similar": is_similar,
+            "importances": importance_dict,
+            "cv_roc_auc": score
+        }
 
     def _call_postgresql(self, table_name: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
+        from psycopg2.extensions import AsIs
+
         query_num_cols = '''
             select string_agg(column_name, ',') as num_columns
             from information_schema.columns
@@ -1866,7 +2050,7 @@ class CheckAdversarialValidation(Metric):
             'index_col': self.column
         }
 
-        num_cols = sql_connector.exec_with_params(query_num_cols, params).fetchone()[0]
+        num_cols = sql_connector.execute(query_num_cols, params).fetchone()[0]
 
         if num_cols is None:
             raise ValueError(f'Table "{table_name}" contains only non-numeric values.')
@@ -1879,10 +2063,10 @@ class CheckAdversarialValidation(Metric):
                 from %(table)s
             )
             select %(coalesce_columns)s,
-                case when (%(index_col)s >= %(start1)s and %(index_col)s <= %(end1)s) then 0 else 1 end as av_label
+                case when (%(index_col)s >= %(start1)s and %(index_col)s < %(end1)s) then 0 else 1 end as av_label
             from %(table)s t, global_min m
-            where (%(index_col)s >= %(start1)s and %(index_col)s <= %(end1)s) or
-                (%(index_col)s >= %(start2)s and %(index_col)s <= %(end2)s)
+            where (%(index_col)s >= %(start1)s and %(index_col)s < %(end1)s) or
+                (%(index_col)s >= %(start2)s and %(index_col)s < %(end2)s)
             order by %(index_col)s
         '''
 
@@ -1897,7 +2081,7 @@ class CheckAdversarialValidation(Metric):
             'end2': self._end_2
         }
 
-        data = np.array(sql_connector.exec_with_params(query_final, params).fetchall())
+        data = np.array(sql_connector.execute(query_final, params).fetchall())
 
         first_part_size = np.sum(data[:, -1] == 0)
         second_part_size = np.sum(data[:, -1] == 1)
@@ -1917,5 +2101,5 @@ class CheckAdversarialValidation(Metric):
             "cv_roc_auc": score
         }
 
-    def _call_mssql(self, df: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         pass
