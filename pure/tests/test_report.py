@@ -2,9 +2,9 @@ import os
 import pickle
 
 import pandas as pd
-from test_fixtures.report_cases import TEST_CASES as report_cases
+from pure.tests.test_fixtures.report_cases import TEST_CASES as report_cases
 
-from report import Report
+from pure.report import Report
 
 
 def test_report_pandas():

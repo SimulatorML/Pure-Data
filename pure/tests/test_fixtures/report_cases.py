@@ -1,6 +1,6 @@
 """Test cases."""
-from test_fixtures.report_checklists import CHECKLIST1, CHECKLIST2
-from test_fixtures.tables import TABLES1, TABLES2
+from pure.tests.test_fixtures.report_checklists import CHECKLIST1, CHECKLIST2
+from pure.tests.test_fixtures.tables import TABLES1, TABLES2
 
 TEST_CASES = [
     {

@@ -1,11 +1,11 @@
 import numbers
 
 import numpy as np
-from pyspark.sql import SparkSession
-from test_fixtures.metric_cases import TEST_CASES as metric_cases
-from test_fixtures.tables import TABLES1, TABLES2
+from pure.tests.test_fixtures.metric_cases import TEST_CASES as metric_cases
+from pure.tests.test_fixtures.tables import TABLES1, TABLES2
 
-import metrics
+from pure import metrics
+from pure.utils import PySparkSingleton
 
 
 def test_metrics_pandas():
@@ -53,7 +53,9 @@ def run_one_pandas_test(metric_name):
 
 def run_one_pyspark_test(metric_name):
     """Test one pyspark engine metric."""
-    spark = SparkSession.builder.master("local").appName("spark_test").getOrCreate()
+    pss = PySparkSingleton()
+
+    spark = pss.sql.SparkSession.builder.master("local").appName("spark_test").getOrCreate()
     spark.sparkContext.setLogLevel("OFF")
     test_cases = metric_cases[metric_name]
     for i, case in enumerate(test_cases):
@@ -63,7 +65,7 @@ def run_one_pyspark_test(metric_name):
         expected_result = case["expected_result"]
 
         table = tables_set[table_name].copy()
-        table_spark = spark.createDataFrame(table)
+        table_spark = spark.createDataFrame(table.reset_index())
         metric_result = getattr(metrics, metric_name)(*params)('pyspark', table_spark)
 
         msg = f"Metric '{metric_name}' should " "return Dict[str, Any[float, int, str]]"
