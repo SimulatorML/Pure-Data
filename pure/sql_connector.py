@@ -53,8 +53,7 @@ class ClickHouseConnector(SQLConnector):
         try:
             self.cursor.execute(query, params)
             return self.cursor.fetchall()
-        except Exception as err:
-            print("Error executing query: ", str(err))
+        except:
             raise
 
     def close(self):
@@ -86,9 +85,8 @@ class PostgreSQLConnector(SQLConnector):
     def execute(self, query: str, params: Dict[str, Any] = None):
         try:
             self.cursor.execute(query, params)
-        except Exception as err:
+        except:
             self.connection.rollback()
-            print("An exception has occured: ", err)
             raise
 
         return self.cursor
@@ -123,8 +121,7 @@ class MSSQLConnector(SQLConnector):
         try:
             self.cursor.execute(query, params)
             return self.cursor.fetchall()
-        except Exception as err:
-            print("Error executing query: ", str(err))
+        except:
             raise
 
     def close(self):
