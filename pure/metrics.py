@@ -1,18 +1,23 @@
 """Valid metrics."""
 
+from __future__ import annotations
 import datetime
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-import pyspark.sql as ps
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_validate
 from sklearn.utils import shuffle
 
-from sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
+from pure.sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
+from pure.utils import PySparkSingleton
+from psycopg2.extensions import AsIs
+
+if TYPE_CHECKING:
+    import pyspark.sql as ps
 
 
 @dataclass
@@ -29,7 +34,10 @@ class Metric:
         if engine == "pandas":
             return self._call_pandas(df)
         elif engine == "pyspark":
-            return self._call_pyspark(df)
+            pss = PySparkSingleton()
+
+            if pss is not None:
+                return self._call_pyspark(pss, df)
         elif engine == "clickhouse":
             return self._call_clickhouse(df, sql_connector)
         elif engine == "postgresql":
@@ -46,7 +54,7 @@ class Metric:
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         return {}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         return {}
 
     def _call_clickhouse(
@@ -63,7 +71,11 @@ class Metric:
     ) -> Dict[str, Any]:
         return {}
 
-    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+    def _call_mssql(
+            self,
+            table_name: str,
+            sql_connector: MSSQLConnector
+    ) -> Dict[str, Any]:
         return {}
 
 
@@ -74,7 +86,7 @@ class CountTotal(Metric):
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         return {"total": len(df)}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         return {"total": df.count()}
 
     def _call_clickhouse(
@@ -92,8 +104,6 @@ class CountTotal(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         query = "select count(1) from %(table)s"
         params = {'table': AsIs(table_name)}
 
@@ -120,13 +130,13 @@ class CountZeros(Metric):
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         k = sum(df[self.column] == 0)
+
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
-        k = df.filter(col(self.column) == 0).count()
+        k = df.filter(pss.func.col(self.column) == 0).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -146,12 +156,10 @@ class CountZeros(Metric):
         return {"total": n, "count": k, "delta": delta}
 
     def _call_postgresql(
-            self,
-            table_name: str,
-            sql_connector: PostgreSQLConnector
+        self,
+        table_name: str,
+        sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         query = '''
             select count(1) as n,
 	            sum(case when %(column)s=0 then 1 else 0 end) as k
@@ -210,20 +218,20 @@ class CountNull(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, isnan, when
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
 
         empty_cols = df.select(
-            sum([when(isnan(c) | col(c).isNull(), 1).otherwise(0) for c in self.columns]).\
-                alias('cols')
+            sum([
+                pss.func.when(pss.func.isnan(c) | pss.func.col(c).isNull(), 1).otherwise(0) \
+                for c in self.columns
+            ]).alias('cols')
         )
 
         if self.aggregation == 'all':
-            k = empty_cols.where(col('cols') == len(self.columns)).count()
+            k = empty_cols.where(pss.func.col('cols') == len(self.columns)).count()
         else:
-            k = empty_cols.where(col('cols') != 0).count()
+            k = empty_cols.where(pss.func.col('cols') != 0).count()
 
         return {"total": n, "count": k, "delta": k / n}
 
@@ -253,8 +261,6 @@ class CountNull(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         if self.aggregation == 'any':
             cond = ' or '.join(f'{col} is null' for col in self.columns)
 
@@ -310,7 +316,7 @@ class CountDuplicates(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
         m = df.select(self.columns).distinct().count()
         k = n - m
@@ -343,8 +349,6 @@ class CountDuplicates(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         table_columns = ', '.join(f"{col}" for col in self.columns)
 
         query = '''
@@ -398,13 +402,13 @@ class CountValue(Metric):
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
         k = np.sum(df[self.column] == self.value)
+
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
-        k = df.filter(col(self.column) == self.value).count()
+        k = df.filter(pss.func.col(self.column) == self.value).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -430,8 +434,6 @@ class CountValue(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         query = '''
             select count(1) as n,
                 sum(case when %(column)s=%(value)s then 1 else 0 end) as k
@@ -487,14 +489,14 @@ class CountBelowValue(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
+
         if self.strict:
-            k = df.filter(col(self.column) < self.value).count()
+            k = df.filter(pss.func.col(self.column) < self.value).count()
         else:
-            k = df.filter(col(self.column) <= self.value).count()
+            k = df.filter(pss.func.col(self.column) <= self.value).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -522,8 +524,6 @@ class CountBelowValue(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         cmp_sign = '<' if self.strict else '<='
 
         query = '''
@@ -581,19 +581,18 @@ class CountBelowColumn(Metric):
             k = np.sum(df[self.column_x] <= df[self.column_y])
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, isnan
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
 
-        mask = isnan(col(self.column_x)) | col(self.column_x).isNull()
-        mask |= isnan(col(self.column_y)) | col(self.column_y).isNull()
+        mask = pss.func.isnan(pss.func.col(self.column_x)) | pss.func.col(self.column_x).isNull()
+        mask |= pss.func.isnan(pss.func.col(self.column_y)) | pss.func.col(self.column_y).isNull()
         df = df.filter(~mask)
 
         if self.strict:
-            k = df.filter(col(self.column_x) < col(self.column_y)).count()
+            k = df.filter(pss.func.col(self.column_x) < pss.func.col(self.column_y)).count()
         else:
-            k = df.filter(col(self.column_x) <= col(self.column_y)).count()
+            k = df.filter(pss.func.col(self.column_x) <= pss.func.col(self.column_y)).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -618,8 +617,6 @@ class CountBelowColumn(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         cmp_sign = '<' if self.strict else '<='
 
         query = '''
@@ -680,21 +677,21 @@ class CountRatioBelow(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, isnan
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
 
-        mask = isnan(col(self.column_x)) | col(self.column_x).isNull()
-        mask |= isnan(col(self.column_y)) | col(self.column_y).isNull()
-        mask |= isnan(col(self.column_z)) | col(self.column_z).isNull()
+        mask = pss.func.isnan(pss.func.col(self.column_x)) | pss.func.col(self.column_x).isNull()
+        mask |= pss.func.isnan(pss.func.col(self.column_y)) | pss.func.col(self.column_y).isNull()
+        mask |= pss.func.isnan(pss.func.col(self.column_z)) | pss.func.col(self.column_z).isNull()
         df = df.filter(~mask)
 
-        ratio = col(self.column_x) / col(self.column_y)
+        ratio = pss.func.col(self.column_x) / pss.func.col(self.column_y)
+
         if self.strict:
-            k = df.filter(ratio < col(self.column_z)).count()
+            k = df.filter(ratio < pss.func.col(self.column_z)).count()
         else:
-            k = df.filter(ratio <= col(self.column_z)).count()
+            k = df.filter(ratio <= pss.func.col(self.column_z)).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -721,8 +718,6 @@ class CountRatioBelow(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         cmp_sign = '<' if self.strict else '<='
 
         query = '''
@@ -771,7 +766,7 @@ class CountCB(Metric):
 
     def __post_init__(self):
         if not 0 <= self.conf <= 1:
-            raise ValueError("Confident leven should be in the interval [0, 1]")
+            raise ValueError("Confident level should be in the interval [0, 1]")
 
         self.alpha = 1 - self.conf
         self.lcb_per = self.alpha / 2
@@ -782,10 +777,8 @@ class CountCB(Metric):
 
         return {"lcb": lcb, "ucb": ucb}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql import DataFrameStatFunctions
-
-        st = DataFrameStatFunctions(df)
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
+        st = pss.sql.DataFrameStatFunctions(df)
         ci = st.approxQuantile(self.column, [self.lcb_per, self.ucb_per], 0)
         return {"lcb": ci[0], "ucb": ci[1]}
 
@@ -813,8 +806,6 @@ class CountCB(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         query = '''
             select percentile_cont(array[%(lcb)s, %(ucb)s])
                 within group (order by %(column)s) as p
@@ -869,16 +860,15 @@ class CountLag(Metric):
         b = b.strftime(self.fmt)
         return {"today": a, "last_day": b, "lag": lag}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, max as max_
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         a = datetime.datetime.now()
-        b = df.select(max_(col(self.column))).collect()[0][0]
+        b = df.select(pss.func.max(pss.func.col(self.column))).collect()[0][0]
         b = datetime.datetime.strptime(b, "%Y-%m-%d")
 
         lag = (a - b).days
         a = a.strftime(self.fmt)
         b = b.strftime(self.fmt)
+
         return {"today": a, "last_day": b, "lag": lag}
 
     def _call_clickhouse(
@@ -906,8 +896,6 @@ class CountLag(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         query = '''
             select current_date as today, max(%(column)s::date) as last_day,
 	            current_date - max(%(column)s::date) as lag
@@ -966,16 +954,17 @@ class CountGreaterValue(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, isnan
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
-        mask = isnan(col(self.column)) | col(self.column).isNull()
+
+        mask = pss.func.isnan(pss.func.col(self.column)) | pss.func.col(self.column).isNull()
         df = df.filter(~mask)
+
         if self.strict:
-            k = df.filter(col(self.column) > self.value).count()
+            k = df.filter(pss.func.col(self.column) > self.value).count()
         else:
-            k = df.filter(col(self.column) >= self.value).count()
+            k = df.filter(pss.func.col(self.column) >= self.value).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -1003,8 +992,6 @@ class CountGreaterValue(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         cmp_sign = '>' if self.strict else '>='
 
         query = '''
@@ -1059,11 +1046,9 @@ class CountValueInSet(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
-        k = df.filter(col(self.column).isin(self.required_set)).count()
+        k = df.filter(pss.func.col(self.column).isin(self.required_set)).count()
 
         return {"total": n, "count": k, "delta": k / n}
 
@@ -1088,8 +1073,6 @@ class CountValueInSet(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         query = '''
             select count(1) as n,
 	            sum(case when %(column)s in %(set)s then 1 else 0 end) as k
@@ -1156,20 +1139,20 @@ class CountValueInBounds(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
+
         if self.strict:
             k = df.filter(
-                (col(self.column) < self.upper_bound)
-                & (col(self.column) > self.lower_bound)
+                (pss.func.col(self.column) < self.upper_bound)
+                & (pss.func.col(self.column) > self.lower_bound)
             ).count()
         else:
             k = df.filter(
-                (col(self.column) <= self.upper_bound)
-                & (col(self.column) >= self.lower_bound)
+                (pss.func.col(self.column) <= self.upper_bound)
+                & (pss.func.col(self.column) >= self.lower_bound)
             ).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -1201,8 +1184,6 @@ class CountValueInBounds(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         cmp_signs = ('>', '<') if self.strict else ('>=', '<=')
 
         query = '''
@@ -1278,26 +1259,25 @@ class CountExtremeValuesFormula(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, isnan, mean as mean_, stddev
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
 
-        mask = isnan(col(self.column)) | col(self.column).isNull()
+        mask = pss.func.isnan(pss.func.col(self.column)) | pss.func.col(self.column).isNull()
         df = df.filter(~mask)
 
         df_stats = df.select(
-            mean_(col(self.column)).alias("mean"),
-            stddev(col(self.column)).alias("std")
+            pss.func.mean(pss.func.col(self.column)).alias("mean"),
+            pss.func.stddev(pss.func.col(self.column)).alias("std")
         ).collect()
 
         mean = df_stats[0]["mean"]
         std = df_stats[0]["std"]
 
         if self.style == "greater":
-            k = df.filter(col(self.column) > (mean + self.std_coef * std)).count()
+            k = df.filter(pss.func.col(self.column) > (mean + self.std_coef * std)).count()
         else:
-            k = df.filter(col(self.column) < (mean - self.std_coef * std)).count()
+            k = df.filter(pss.func.col(self.column) < (mean - self.std_coef * std)).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -1328,8 +1308,6 @@ class CountExtremeValuesFormula(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         signs = ('>', '+') if self.style == 'greater' else ('<', '-')
 
         query = '''
@@ -1409,21 +1387,19 @@ class CountExtremeValuesQuantile(Metric):
 
         return {"total": n, "count": k, "delta": k / n}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql import DataFrameStatFunctions
-        from pyspark.sql.functions import col, isnan
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         n = df.count()
 
-        mask = isnan(col(self.column)) | col(self.column).isNull()
+        mask = pss.func.isnan(pss.func.col(self.column)) | pss.func.col(self.column).isNull()
         df = df.filter(~mask)
 
-        st = DataFrameStatFunctions(df)
+        st = pss.sql.DataFrameStatFunctions(df)
         quantile_value = st.approxQuantile(self.column, [self.q], 0)[0]
         if self.style == "greater":
-            k = df.filter(col(self.column) > quantile_value).count()
+            k = df.filter(pss.func.col(self.column) > quantile_value).count()
         else:
-            k = df.filter(col(self.column) < quantile_value).count()
+            k = df.filter(pss.func.col(self.column) < quantile_value).count()
+
         return {"total": n, "count": k, "delta": k / n}
 
     def _call_clickhouse(
@@ -1455,8 +1431,6 @@ class CountExtremeValuesQuantile(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         cmp_sign = '>' if self.style == 'greater' else '<'
 
         query = '''
@@ -1538,16 +1512,17 @@ class CountLastDayRows(Metric):
             f"at_least_{self.percent}%": at_least,
         }
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, asc, to_date, isnan
-
-        empty_rows_qty = df.filter(col(self.column).isNull() | isnan(self.column)).count()
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
+        empty_rows_qty = df.filter(
+            pss.func.col(self.column).isNull() |
+            pss.func.isnan(self.column)
+        ).count()
 
         if empty_rows_qty != 0:
             raise ValueError(f"None/nan values in column: {self.column}.")
 
-        daily_rows = df.groupBy(to_date(col(self.column)).alias(self.column)).count().\
-            sort(asc(self.column)).select('count')
+        daily_rows = df.groupBy(pss.func.to_date(pss.func.col(self.column)).alias(self.column)).\
+            count().sort(pss.func.asc(self.column)).select('count')
 
         counts = [row['count'] for row in daily_rows.select('count').toLocalIterator()]
         last_date_count = counts[-1]
@@ -1597,8 +1572,6 @@ class CountLastDayRows(Metric):
             table_name: str,
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
         query = '''
             with groups as (
                 select %(column)s::date, count(1) as qty, row_number() over w as x
@@ -1692,16 +1665,17 @@ class CountFewLastDayRows(Metric):
 
         return {"average": average, "days": k}
 
-    def _call_pyspark(self, df: ps.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, asc, to_date, isnan
-
-        empty_rows_qty = df.filter(col(self.column).isNull() | isnan(self.column)).count()
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
+        empty_rows_qty = df.filter(
+            pss.func.col(self.column).isNull() |
+            pss.func.isnan(self.column)
+        ).count()
 
         if empty_rows_qty != 0:
             raise ValueError(f"None/nan values in column: {self.column}.")
 
-        daily_rows = df.groupBy(to_date(col(self.column)).alias(self.column)).count().\
-            sort(asc(self.column)).select('count')
+        daily_rows = df.groupBy(pss.func.to_date(pss.func.col(self.column)).alias(self.column)).\
+            count().sort(pss.func.asc(self.column)).select('count')
 
         if self.number >= daily_rows.count():
             raise ValueError(
@@ -1749,9 +1723,11 @@ class CountFewLastDayRows(Metric):
 
         return {"average": float(average), "days": days}
 
-    def _call_postgresql(self, table_name: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
+    def _call_postgresql(
+        self,
+        table_name: str,
+        sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
         query = '''
             with groups as (
                 select %(column)s::date, count(1) as qty, row_number() over w as x
@@ -1911,9 +1887,7 @@ class CheckAdversarialValidation(Metric):
             "cv_roc_auc": score
         }
 
-    def _call_pyspark(self, df: pd.DataFrame) -> Dict[str, Any]:
-        from pyspark.sql.functions import col, to_date, lit, least, min as min_
-
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         if self.column not in df.columns:
             raise ValueError(f'Dataframe must contain "{self.column}" column to get slices.')
 
@@ -1921,24 +1895,32 @@ class CheckAdversarialValidation(Metric):
         importance_dict = {}
 
         num_types = ['int', 'bigint', 'float', 'double']
-        num_cols = [col for col, data_type in df.dtypes if data_type in num_types]
+        num_cols = [
+            col for col, data_type in df.dtypes
+            if (data_type in num_types) & (col != self.column)
+        ]
+
         if len(num_cols) == 0:
             raise ValueError("Dataframe contains only non-numeric values.")
 
         num_data = df.select(num_cols)
 
-        col_mins = num_data.agg(*[min_(col(column)).alias(f"{column}") for column in num_cols])
-        min_value = col_mins.select(least(*col_mins.columns)).collect()[0][0]
+        col_mins = num_data.agg(
+            *[pss.func.min(pss.func.col(column)).alias(f"{column}") for column in num_cols]
+        )
+        min_value = col_mins.select(pss.func.least(*col_mins.columns)).collect()[0][0]
         num_data = num_data.fillna(min_value - 1000)
 
         try:
             first_part = num_data.filter(
-                (to_date(col(self.column)) >= self._start_1) & (to_date(col(self.column)) < self._end_1)
-            ).withColumn('av_label', lit(0))
+                (pss.func.to_date(pss.func.col(self.column)) >= self._start_1) &
+                (pss.func.to_date(pss.func.col(self.column)) < self._end_1)
+            ).withColumn('av_label', pss.func.lit(0))
 
             second_part = num_data.filter(
-                (to_date(col(self.column)) >= self._start_2) & (to_date(col(self.column)) < self._end_2)
-            ).withColumn('av_label', lit(1))
+                (pss.func.to_date(pss.func.col(self.column)) >= self._start_2) &
+                (pss.func.to_date(pss.func.col(self.column)) < self._end_2)
+            ).withColumn('av_label', pss.func.lit(1))
         except TypeError:
             print(f"Unable to get slices for column {self.column}.")
             raise
@@ -1960,7 +1942,11 @@ class CheckAdversarialValidation(Metric):
             "cv_roc_auc": score
         }
 
-    def _call_clickhouse(self, table_name: str, sql_connector: ClickHouseConnector) -> Dict[str, Any]:
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
         query_num_cols = '''
             select groupArray(column_name) as num_columns
             from information_schema.columns
@@ -2026,9 +2012,11 @@ class CheckAdversarialValidation(Metric):
             "cv_roc_auc": score
         }
 
-    def _call_postgresql(self, table_name: str, sql_connector: PostgreSQLConnector) -> Dict[str, Any]:
-        from psycopg2.extensions import AsIs
-
+    def _call_postgresql(
+        self,
+        table_name: str,
+        sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
         query_num_cols = '''
             select string_agg(column_name, ',') as num_columns
             from information_schema.columns

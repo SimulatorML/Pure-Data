@@ -1,17 +1,20 @@
 """Valid report."""
 
+from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-import pyspark.sql as ps
 
-from metrics import Metric
-from sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
+from pure.metrics import Metric
+from pure.sql_connector import ClickHouseConnector, PostgreSQLConnector, MSSQLConnector
 
 LimitType = Dict[str, Tuple[float, float]]
 CheckType = Tuple[str, Metric, LimitType]
+
+if TYPE_CHECKING:
+    import pyspark.sql as ps
 
 
 @dataclass
