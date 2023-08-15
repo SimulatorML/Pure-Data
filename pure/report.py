@@ -42,6 +42,9 @@ class Report:
         decimal_places (int, optional):
             The number of decimal places to round numeric metric values to. Must be in the range [0, 8].
             Defaults to 3.
+        table_max_col_width (int, optional):
+            Limits the maximum number of characters in a table column when printing a report.
+            For `None` value - column width is unlimited and varies depending on its content.
         verbose (bool, optional):
             If True, prints verbose output during metric calculations. Defaults to False.
 
@@ -51,30 +54,71 @@ class Report:
         ValueError:
             - If the checklist is empty.
             - If the tables dictionary is empty.
+            - If table_max_col_width is not within the valid range [8, 1024].
             - If decimal_places is not within the valid range [0, 8].
 
     Returns:
         Report:
             A Report instance containing the generated data quality report.
 
-
+    Examples:
+        See `examples` folder for more complex reports for various engines.
+        >>> import pandas as pd
+        >>> from pure.report import Report
+        >>> import pure.metrics as m
+        >>>
+        >>> sales = pd.DataFrame(
+        >>>     [
+        >>>         ["2022-10-21", 100, None, 120.0, 500.0, "visa"],
+        >>>         ["2022-10-21", 100, 6, 120.0, 720.0, "visa"],
+        >>>         ["2022-10-21", 200, 2, 200.0, 400.0, None],
+        >>>         ["2022-10-22", 300, None, 85.0, 850.0, "unionpay"],
+        >>>         ["2022-10-22", 100, 3, 110.0, 330.0, "tinkoff"],
+        >>>         ["2022-10-22", 200, None, 200.0, 1600.0, "paypal"]
+        >>>     ],
+        >>>     columns=["day", "item_id", "qty", "price", "revenue", "pay_card"]
+        >>> )
+        >>>
+        >>> checklist = [
+        >>>     ("sales", m.CountTotal(), {"total": (1, 1e6)}),
+        >>>     ("sales", m.CountZeros("qty"), {"delta": (0, 0.3)}),
+        >>>     ("sales", m.CountNull(["price", "qty"], "all"), {"total": (0, 0)})
+        >>> ]
+        >>>
+        >>> tables = {'sales': sales}
+        >>>
+        >>> report = Report(tables, checklist, engine='pandas')
+        >>> print(report)
+        DQ Report for tables ['sales'], engine: `pandas`.
+        +--------------+--------------------------------------------------------+----------------------------------------+---------------------------+----------+---------+
+        | table_name   | metric_params                                          | metric_values                          | limits                    | status   | error   |
+        |--------------+--------------------------------------------------------+----------------------------------------+---------------------------+----------+---------|
+        | sales        | CountNull(columns=['price', 'qty'], aggregation='all') | {'total': 6, 'count': 0, 'delta': 0.0} | {'total': (0, 0)}         | F        |         |
+        | sales        | CountTotal()                                           | {'total': 6}                           | {'total': (1, 1000000.0)} | .        |         |
+        | sales        | CountZeros(column='qty')                               | {'total': 6, 'count': 0, 'delta': 0.0} | {'delta': (0, 0.3)}       | .        |         |
+        +--------------+--------------------------------------------------------+----------------------------------------+---------------------------+----------+---------+
+        Total checks: 3,  passed: 2, failed: 1, errors: 0.
     """
     def __init__(
             self,
             tables: Dict[str, Union[pd.DataFrame, ps.DataFrame, str]],
             checklist: List[CheckType],
             engine: str = "pandas",
-            decimal_places = 3,
-            verbose = False
+            decimal_places: int = 3,
+            table_max_col_width: int = None,
+            verbose: bool = False
     ):
         self.tables = tables
         self.checklist = checklist
         self.engine = engine
         self.decimal_places = decimal_places
+        self.table_max_col_width = table_max_col_width
         self.verbose = verbose
 
         self._cached_reports = _cached_reports
         self._result = {}
+
+        self.__post_init__()
 
         self._fit()
 
@@ -85,10 +129,11 @@ class Report:
             - If the `checklist` is not empty.
             - If the `tables` dictionary is not empty.
             - If the `decimal_places` value is within the valid range [0, 8].
+            - If the `table_max_col_width` value is within the valid range [8, 1024].
 
         Raises:
             NotImplementedError: If the provided `engine` is not supported.
-            ValueError: If the `checklist` is empty, `tables` is empty, or `decimal_places` is not within the valid range.
+            ValueError: If the `checklist` is empty, `tables` is empty, `table_max_col_width` or `decimal_places` is not within the valid range.
         """
         supported_engines = {'pandas', 'pyspark', 'postgresql', 'clickhouse', 'mssql'}
 
@@ -105,8 +150,12 @@ class Report:
         if len(self.tables) == 0:
             raise ValueError('Empty tables passed.')
 
-        if 0 < self.decimal_places < 8:
+        if not (0 <= self.decimal_places <= 8):
             raise ValueError('Decimal places for numeric data must be in range [0, 8].')
+
+        if self.table_max_col_width:
+            if not (8 <= self.table_max_col_width <= 1024):
+                raise ValueError('Max column width must be in range [8, 1024].')
 
     def _fit(self):
         """
@@ -201,7 +250,8 @@ class Report:
                 if self.verbose:
                     print(f"Check '{table_name}:{metric}' completed with status `{status}`.")
 
-            tqdm.write("All checks completed.")
+            if self.verbose:
+                tqdm.write("All checks completed.")
         finally:
             for conn_dict in conn_pool.values():
                 if conn_dict['conn'] is not None:
@@ -281,7 +331,7 @@ class Report:
         """
         result = (
             f"DQ Report for tables {self.stats['tables']}, engine: `{self.engine}`.\n"
-            f"{tabulate(self.df, headers='keys', tablefmt='psql', showindex=False)}\n"
+            f"{tabulate(self.df, headers='keys', tablefmt='psql', showindex=False, maxcolwidths=self.table_max_col_width)}\n"
             f"Total checks: {self.stats['total']},  passed: {self.stats['passed']}, failed: {self.stats['failed']}, errors: {self.stats['errors']}."
         )
 
