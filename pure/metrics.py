@@ -1,6 +1,28 @@
 """Valid metrics."""
 
 from __future__ import annotations
+
+__all__ = [
+    'CountTotal',
+    'CountZeros',
+    'CountNull',
+    'CountDuplicates',
+    'CountValue',
+    'CountBelowValue',
+    'CountBelowColumn',
+    'CountRatioBelow',
+    'CountCB',
+    'CountLag',
+    'CountGreaterValue',
+    'CountValueInSet',
+    'CountValueInBounds',
+    'CountExtremeValuesFormula',
+    'CountExtremeValuesQuantile',
+    'CountLastDayRows',
+    'CountFewLastDayRows',
+    'CheckAdversarialValidation'
+]
+
 import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple, Union, TYPE_CHECKING
@@ -1862,8 +1884,7 @@ class CheckAdversarialValidation(Metric):
         try:
             first_part = num_data.loc[self._start_1 : self._end_1, :]
             second_part = num_data.loc[self._start_2 : self._end_2, :]
-        except TypeError as err:
-            print(f"Unable to get slices: {err.args}.")
+        except:
             raise
 
         if len(first_part) == 0 or len(second_part) == 0:
@@ -1921,8 +1942,7 @@ class CheckAdversarialValidation(Metric):
                 (pss.func.to_date(pss.func.col(self.column)) >= self._start_2) &
                 (pss.func.to_date(pss.func.col(self.column)) < self._end_2)
             ).withColumn('av_label', pss.func.lit(1))
-        except TypeError:
-            print(f"Unable to get slices for column {self.column}.")
+        except:
             raise
 
         if first_part.count() == 0 or second_part.count() == 0:
