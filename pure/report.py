@@ -259,8 +259,8 @@ class Report:
 
         df = pd.DataFrame(
             data=rows,
-            columns=['table_name', 'metric_params', 'metric_values', 'limits', 'status', 'error']
-        ).sort_values(by=['table_name', 'metric_params'])
+            columns=['table_name', 'metric_params', 'metric_values', 'limits', 'status', 'error'],
+        )
 
         self._result = {
             'df': df,
