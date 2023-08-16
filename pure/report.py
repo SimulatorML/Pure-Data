@@ -19,7 +19,7 @@ CheckType = Tuple[str, Metric, LimitType]
 if TYPE_CHECKING:
     import pyspark.sql as ps
 
-_cached_reports = ReportCache()
+_cache = ReportCache()
 
 
 @dataclass
@@ -35,7 +35,7 @@ class Report:
             Each tuple contains (table_name, metric_function, limits), where:
                 - table_name (str): The name of the table to be checked.
                 - metric_function (Callable): The function to compute the metric for the check.
-                - limits (Optional[Dict[str, Tuple[float, float]]]): Limits for the metric, if applicable.11
+                - limits (Optional[Dict[str, Tuple[float, float]]]): Limits for the metric, if applicable.
         engine (str, optional):
             The processing engine to use for executing the metrics. Supported engines:
             'pandas', 'pyspark', 'postgresql', 'clickhouse', 'mssql'. Defaults to 'pandas'.
@@ -47,6 +47,24 @@ class Report:
             For `None` value - column width is unlimited and varies depending on its content.
         verbose (bool, optional):
             If True, prints verbose output during metric calculations. Defaults to False.
+
+    Properties:
+        df (Pandas DataFrame):
+            Get the DataFrame representation of the report:
+                `table_name`        # Checked table name
+                `metric_params`     # Metric parameters
+                `metric_values`     # Metric values for checked table
+                `limits`            # Non-strict lower and upper bound for specified metric value
+                `status`            # `.` check is passed, `F` check is not passed, `E` erorr during check
+                `error`             # Error message if check is failed, otherwise empty string
+
+        stats (Dict):
+            Get the summary of the report:
+                'tables': List[str],  # List of table names
+                'total': int,          # Total number of checks performed
+                'passed': int,         # Number of checks passed
+                'failed': int,         # Number of checks failed
+                'errors': int          # Number of checks with errors
 
     Raises:
         NotImplementedError:
@@ -90,37 +108,24 @@ class Report:
         >>> report = Report(tables, checklist, engine='pandas')
         >>> print(report)
         DQ Report for tables ['sales'], engine: `pandas`.
-        +--------------+--------------------------------------------------------+----------------------------------------+---------------------------+----------+---------+
-        | table_name   | metric_params                                          | metric_values                          | limits                    | status   | error   |
-        |--------------+--------------------------------------------------------+----------------------------------------+---------------------------+----------+---------|
-        | sales        | CountNull(columns=['price', 'qty'], aggregation='all') | {'total': 6, 'count': 0, 'delta': 0.0} | {'total': (0, 0)}         | F        |         |
-        | sales        | CountTotal()                                           | {'total': 6}                           | {'total': (1, 1000000.0)} | .        |         |
-        | sales        | CountZeros(column='qty')                               | {'total': 6, 'count': 0, 'delta': 0.0} | {'delta': (0, 0.3)}       | .        |         |
-        +--------------+--------------------------------------------------------+----------------------------------------+---------------------------+----------+---------+
+        +--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------+
+        | table_name   | metric_params                                          | metric_values                          | limits                  | status   | error   |
+        |--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------|
+        | sales        | CountTotal()                                           | {'total': 6}                           | 1 <= total <= 1000000.0 | .        |         |
+        | sales        | CountZeros(column='qty')                               | {'total': 6, 'count': 0, 'delta': 0.0} | 0 <= delta <= 0.3       | .        |         |
+        | sales        | CountNull(columns=['price', 'qty'], aggregation='all') | {'total': 6, 'count': 0, 'delta': 0.0} | 0 <= total <= 0         | F        |         |
+        +--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------+
         Total checks: 3,  passed: 2, failed: 1, errors: 0.
     """
-    def __init__(
-            self,
-            tables: Dict[str, Union[pd.DataFrame, ps.DataFrame, str]],
-            checklist: List[CheckType],
-            engine: str = "pandas",
-            decimal_places: int = 3,
-            table_max_col_width: int = None,
-            verbose: bool = False
-    ):
-        self.tables = tables
-        self.checklist = checklist
-        self.engine = engine
-        self.decimal_places = decimal_places
-        self.table_max_col_width = table_max_col_width
-        self.verbose = verbose
+    tables: Dict[str, Union[pd.DataFrame, ps.DataFrame, str]]
+    checklist: List[CheckType]
+    engine: str = "pandas"
+    decimal_places: int = 3
+    table_max_col_width: int = None
+    verbose: bool = False
 
-        self._cached_reports = _cached_reports
-        self._result = {}
-
-        self.__post_init__()
-
-        self._fit()
+    _cached_reports = _cache
+    _result = {}
 
     def __post_init__(self):
         """
@@ -157,6 +162,8 @@ class Report:
             if not (8 <= self.table_max_col_width <= 1024):
                 raise ValueError('Max column width must be in range [8, 1024].')
 
+        self._fit()
+
     def _fit(self):
         """
         Calculate DQ metrics and build a report.
@@ -172,13 +179,7 @@ class Report:
                 The dictionary structure is as follows:
                 {
                     'df': pd.DataFrame,  # Data quality report
-                    'stats': {
-                        'tables': List[str],  # List of table names
-                        'total': int,          # Total number of checks performed
-                        'passed': int,         # Number of checks passed
-                        'failed': int,         # Number of checks failed
-                        'errors': int          # Number of checks with errors
-                    }
+                    'stats': Dict, # Summary of the report
                 }
         """
         if self.engine in {'pandas', 'pyspark'}:
@@ -229,9 +230,11 @@ class Report:
 
                     metric_values = round_nested_dict(metric_values, self.decimal_places)
 
+                    str_limits = str(limits)
                     if limits and metric_values:
                         chk_col = list(limits.keys())[0]
                         low, high = list(limits.values())[0]
+                        str_limits = f'{low} <= {chk_col} <= {high}'
                         chk_value = metric_values.get(chk_col)
 
                         if chk_value < low or chk_value > high:
@@ -242,6 +245,7 @@ class Report:
                     error = str(ex)
 
                 row['metric_values'] = metric_values
+                row['limits'] = str_limits
                 row['status'] = status
                 row['error'] = error
 
