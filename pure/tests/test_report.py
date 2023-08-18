@@ -1,11 +1,10 @@
 import os
 import pickle
-
 import pandas as pd
-from pure.tests.test_fixtures.report_cases import TEST_CASES as report_cases
 
 from pure.report import Report
-
+from pure.utils import PySparkSingleton
+from pure.tests.test_fixtures.report_cases import TEST_CASES as report_cases
 
 def test_report_pandas():
     """Test Report. Pandas version.
@@ -13,8 +12,8 @@ def test_report_pandas():
     Check on simple examples that Report returns result equal to the expected one.
     """
 
-    dir = os.path.abspath(os.path.dirname(__file__))
-    dumps_path = os.path.join(dir, "test_fixtures", "report_dumps")
+    dir_ = os.path.abspath(os.path.dirname(__file__))
+    dumps_path = os.path.join(dir_, "test_fixtures", "report_dumps")
 
     for case in report_cases:
         tables_set = case["tables_set"]
@@ -22,24 +21,78 @@ def test_report_pandas():
         dump_file = os.path.join(dumps_path, case["expected_result_dump_file"])
 
         expected_result = pickle.load(open(dump_file, "rb"))
-        result = Report(checklist).fit(tables_set)
+
+        current_result = Report(tables_set, checklist, engine='pandas')
+
         correct_order = [
-            (row[0], row[1]) for index, row in expected_result["result"].iterrows()
+            (row[0], row[1]) for _, row in expected_result.df.iterrows()
         ]
-        result_order = [
-            (row[1]["table_name"], row[1]["metric_name"])
-            for row in result["result"].iterrows()
+
+        current_order = [
+            (row[1]["table_name"], row[1]["metric_params"]) for row in current_result.df.iterrows()
         ]
 
         # order in report and order in checklist should match
-        assert correct_order == result_order
-        assert_report_equals(result["result"], expected_result["result"])
+        assert correct_order == current_order
+        assert_report_equals(current_result.df, expected_result.df)
 
-        keys_to_check = list(result.keys())
-        keys_to_check.remove("result")
+        keys_to_check = list(current_result.stats)
         for key in keys_to_check:
             # check that values in report (except metric results) are equal
-            assert expected_result[key] == result[key]
+            assert expected_result.stats[key] == current_result.stats[key]
+
+
+def test_report_pyspark():
+    """Test Report. PySpark version.
+
+    Check on simple examples that Report returns result equal to the expected one.
+    """
+
+    dir_ = os.path.abspath(os.path.dirname(__file__))
+    dumps_path = os.path.join(dir_, "test_fixtures", "report_dumps")
+
+    pss = PySparkSingleton()
+    spark = pss.sql.SparkSession.builder.master("local").appName("spark_test").getOrCreate()
+    spark.sparkContext.setLogLevel("OFF")
+
+    for case in report_cases:
+        tables_set = case["tables_set"]
+
+        # convert pandas dataframe to pyspark
+        ps_tables_set = {}
+        for key, table in tables_set.items():
+            table_spark = spark.createDataFrame(table.reset_index())
+            ps_tables_set[key] = table_spark
+
+        checklist = case["checklist"]
+        dump_file = os.path.join(dumps_path, case["expected_result_dump_file"])
+
+        expected_result = pickle.load(open(dump_file, "rb"))
+
+        current_result = Report(ps_tables_set, checklist, engine='pyspark')
+
+        correct_order = [
+            (row[0], row[1]) for _, row in expected_result.df.iterrows()
+        ]
+
+        current_order = [
+            (row[1]["table_name"], row[1]["metric_params"]) for row in current_result.df.iterrows()
+        ]
+
+        # order in report and order in checklist should match
+        assert correct_order == current_order
+
+        assert_report_equals(
+            current_result.df.drop(columns='error'),
+            expected_result.df.drop(columns='error')
+        )
+
+        keys_to_check = list(current_result.stats)
+        for key in keys_to_check:
+            # check that values in report (except metric results) are equal
+            assert expected_result.stats[key] == current_result.stats[key]
+
+    spark.stop()
 
 
 def assert_report_equals(user_report: pd.DataFrame, valid_report: pd.DataFrame) -> None:
