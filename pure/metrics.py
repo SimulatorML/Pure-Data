@@ -7,6 +7,7 @@ __all__ = [
     'CountZeros',
     'CountNull',
     'CountDuplicates',
+    'CountUnique',
     'CountValue',
     'CountBelowValue',
     'CountBelowColumn',
@@ -421,6 +422,107 @@ class CountDuplicates(Metric):
                 group by {table_columns}
             )
             select sum(n) as n, sum(k) as k
+            from groups
+        '''
+        n, k = sql_connector.execute(query)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
+
+
+@dataclass
+class CountUnique(Metric):
+    """
+    Number of unique rows in chosen columns.
+    Columns can be passed as list of strings or string with comma separated values.
+    """
+
+    columns: Union[List[str], str]
+
+    def __post_init__(self):
+        if isinstance(self.columns, str):
+            self.columns = [value.strip() for value in self.columns.split(',') if value.strip()]
+
+        if not self.columns:
+            raise ValueError('Passed empty list or string without comma separated columns.')
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        n = len(df)
+
+        groups = df.groupby(self.columns, dropna=False).size()
+        k = np.sum(groups == 1)
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
+        n = df.count()
+
+        first_col = self.columns[0]
+        k = df.groupby(self.columns).agg(pss.func.count(first_col).alias('_group_qty')).\
+            filter(pss.func.col('_group_qty') == 1).count()
+
+        return {"total": n, "count": k, "delta": k / n}
+
+    def _call_clickhouse(
+            self,
+            table_name: str,
+            sql_connector: ClickHouseConnector
+    ) -> Dict[str, Any]:
+        table_columns = ', '.join(f"{col}" for col in self.columns)
+
+        query = f'''
+            with groups as (
+                select count(1) as n, count(1) as k
+                from {table_name}
+                group by {table_columns}
+            )
+            select sum(n) as n, sum(k) filter(where k = 1) as k
+            from groups
+        '''
+        n, k = sql_connector.execute(query)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
+
+    def _call_postgresql(
+            self,
+            table_name: str,
+            sql_connector: PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        table_columns = ', '.join(f"{col}" for col in self.columns)
+
+        query = '''
+            with groups as (
+                select count(1) as n, count(1) as k
+                from %(table)s
+                group by %(columns)s
+            )
+            select sum(n)::int as n,
+                sum(case when k=1 then 1 else 0 end)::int as k
+            from groups
+        '''
+
+        params = {
+            'table': AsIs(table_name),
+            'columns': AsIs(table_columns)
+        }
+
+        n, k = sql_connector.execute(query, params)[0]
+        delta = 0 if n == 0 else k / n
+
+        return {"total": n, "count": k, "delta": delta}
+
+    def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
+        table_columns = ', '.join(f"{col}" for col in self.columns)
+
+        query = f'''
+            with groups as (
+                select count(1) as n, count(1) as k
+                from {table_name}
+                group by {table_columns}
+            )
+            select sum(n) as n,
+                sum(case when k=1 then 1 else 0 end) as k
             from groups
         '''
         n, k = sql_connector.execute(query)[0]

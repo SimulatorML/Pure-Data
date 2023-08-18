@@ -111,6 +111,20 @@ TEST_CASES = {
             "expected_result": {"total": 21, "count": 11, "delta": 0.523809},
         },
     ],
+    "CountUnique": [
+        {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": [["item_id", "qty"]],
+            "expected_result": {"total": 21, "count": 3, "delta": 0.142857},
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": ["item_id  , qty, pay_card, , "],
+            "expected_result": {"total": 21, "count": 19, "delta": 0.904761},
+        },
+    ],
     "CountValue": [
         {
             "tables_set": TABLES1,
