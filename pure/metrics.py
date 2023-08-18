@@ -23,7 +23,7 @@ __all__ = [
     'CheckAdversarialValidation'
 ]
 
-import datetime
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple, Union, TYPE_CHECKING
 
@@ -129,7 +129,7 @@ class CountTotal(Metric):
         query = "select count(1) from %(table)s"
         params = {'table': AsIs(table_name)}
 
-        n = sql_connector.execute(query, params).fetchone()[0]
+        n = sql_connector.execute(query, params)[0][0]
 
         return {"total": n}
 
@@ -193,7 +193,7 @@ class CountZeros(Metric):
             'column': AsIs(self.column)
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -213,7 +213,9 @@ class CountZeros(Metric):
 
 @dataclass
 class CountNull(Metric):
-    """Number of empty values in chosen columns.
+    """
+    Number of empty values in chosen columns.
+    Columns can be passed as list of strings or string with comma separated values.
 
     If 'aggregation' == 'any', then count rows where
     at least one value from defined 'columns' set is Null.
@@ -221,12 +223,18 @@ class CountNull(Metric):
     all values from defined 'columns' set are Null.
     """
 
-    columns: List[str]
+    columns: Union[List[str], str]
     aggregation: str = "any"  # either "all", or "any"
 
     def __post_init__(self):
         if self.aggregation not in ["all", "any"]:
             raise ValueError("Aggregation must be either 'all' or 'any'.")
+
+        if isinstance(self.columns, str):
+            self.columns = [value.strip() for value in self.columns.split(',') if value.strip()]
+
+        if not self.columns:
+            raise ValueError('Passed empty list or string without comma separated columns.')
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -303,7 +311,7 @@ class CountNull(Metric):
             'cond': AsIs(cond)
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -328,9 +336,19 @@ class CountNull(Metric):
 
 @dataclass
 class CountDuplicates(Metric):
-    """Number of duplicates in chosen columns."""
+    """
+    Number of duplicates in chosen columns.
+    Columns can be passed as list of strings or string with comma separated values.
+    """
 
-    columns: List[str]
+    columns: Union[List[str], str]
+
+    def __post_init__(self):
+        if isinstance(self.columns, str):
+            self.columns = [value.strip() for value in self.columns.split(',') if value.strip()]
+
+        if not self.columns:
+            raise ValueError('Passed empty list or string without comma separated columns.')
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -388,7 +406,7 @@ class CountDuplicates(Metric):
             'columns': AsIs(table_columns)
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -468,7 +486,7 @@ class CountValue(Metric):
             'value': self.value
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -561,7 +579,7 @@ class CountBelowValue(Metric):
             'value': self.value
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -654,7 +672,7 @@ class CountBelowColumn(Metric):
             'cmp': AsIs(cmp_sign)
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -756,7 +774,7 @@ class CountRatioBelow(Metric):
             'cmp': AsIs(cmp_sign)
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -841,7 +859,7 @@ class CountCB(Metric):
             'ucb': self.ucb_per
         }
 
-        lcb, ucb = sql_connector.execute(query, params).fetchone()[0]
+        lcb, ucb = sql_connector.execute(query, params)[0]
 
         return {"lcb": lcb, "ucb": ucb}
 
@@ -865,33 +883,69 @@ class CountCB(Metric):
 
 @dataclass
 class CountLag(Metric):
-    """A lag between last date and today.
+    """
+    A lag between the last datetime value in the table and today.
 
-    Define last date in chosen date column.
-    Calculate a lag in days between last date and today.
+    Args:
+        column (str):
+            Column name for datetime value from table
+        step (str, optional):
+            Determine step for difference between datetimes: {`day`, `hour`, `minute`}
+            Defaults to `day`
+
+        _today_test (str, optional):
+            Only for tests, don't use in other cases!
+            Defaults to None
     """
 
     column: str
-    fmt: str = "%Y-%m-%d"
+    step: str = 'day'
+    _today_test: datetime = None
+
+    def __post_init__(self):
+        if self.step not in ['day', 'hour', 'minute']:
+            raise ValueError("Passed `step` value differs from `day`, `hour` or `minute`.")
+
+        if self._today_test:
+            if not isinstance(self._today_test, datetime):
+                raise TypeError("Type of parameter `_today_test` must be `datetime`.")
+
+    def _lag(self, last_dt: datetime) -> Dict:
+        if self._today_test:
+            today = self._today_test
+        else:
+            today = datetime.now()
+
+        diff = today - last_dt
+        fmt = '%Y-%m-%d %H:%M'
+
+        if self.step == 'day':
+            lag = diff.days
+            fmt = '%Y-%m-%d'
+        elif self.step == 'hour':
+            lag = int(diff.total_seconds() / 3600)
+        elif self.step == 'minute':
+            lag = int(diff.total_seconds() / 60)
+
+        return {
+            "today": today.strftime(fmt),
+            "last_day": last_dt.strftime(fmt),
+            "lag": lag
+        }
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
-        a = datetime.datetime.now()
-        b = pd.to_datetime(df[self.column]).max()
-        lag = (a - b).days
-        a = a.strftime(self.fmt)
-        b = b.strftime(self.fmt)
-        return {"today": a, "last_day": b, "lag": lag}
+        last_dt = pd.to_datetime(df[self.column]).max().to_pydatetime()
+
+        return self._lag(last_dt)
 
     def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
-        a = datetime.datetime.now()
-        b = df.select(pss.func.max(pss.func.col(self.column))).collect()[0][0]
-        b = datetime.datetime.strptime(b, "%Y-%m-%d")
+        last_dt = df.select(
+            pss.func.max(
+                pss.func.col(self.column).cast(pss.sql.types.TimestampType())
+            )
+        ).collect()[0][0]
 
-        lag = (a - b).days
-        a = a.strftime(self.fmt)
-        b = b.strftime(self.fmt)
-
-        return {"today": a, "last_day": b, "lag": lag}
+        return self._lag(last_dt)
 
     def _call_clickhouse(
             self,
@@ -899,19 +953,13 @@ class CountLag(Metric):
             sql_connector: ClickHouseConnector
     ) -> Dict[str, Any]:
         query = f'''
-            select today() as today,
-                max({self.column}::date) as last_day,
-                dateDiff('day', max({self.column}::date), today()) as lag
+            select max({self.column})::datetime as last_dt
             from {table_name}
         '''
 
-        today, last_day, lag = sql_connector.execute(query)[0]
+        last_dt = sql_connector.execute(query)[0][0]
 
-        return {
-            "today": today.strftime(self.fmt),
-            "last_day": last_day.strftime(self.fmt),
-            "lag": lag
-        }
+        return self._lag(last_dt)
 
     def _call_postgresql(
             self,
@@ -919,8 +967,7 @@ class CountLag(Metric):
             sql_connector: PostgreSQLConnector
     ) -> Dict[str, Any]:
         query = '''
-            select current_date as today, max(%(column)s::date) as last_day,
-	            current_date - max(%(column)s::date) as lag
+            select max(%(column)s)::timestamp as last_dt
             from %(table)s;
         '''
 
@@ -929,28 +976,19 @@ class CountLag(Metric):
             'column': AsIs(self.column)
         }
 
-        today, last_day, lag = sql_connector.execute(query, params).fetchone()
+        last_dt = sql_connector.execute(query, params)[0][0]
 
-        return {
-            "today": today.strftime(self.fmt),
-            "last_day": last_day.strftime(self.fmt),
-            "lag": lag
-        }
+        return self._lag(last_dt)
 
     def _call_mssql(self, table_name: str, sql_connector: MSSQLConnector) -> Dict[str, Any]:
         query = f'''
-            select cast(getdate() as date) as today, max(cast({self.column} as date)) as last_day,
-	            datediff(day, max(cast({self.column} as date)), cast(getdate() as date))
+            select cast(max({self.column}) as smalldatetime) as last_dt
             from {table_name}
         '''
 
-        today, last_day, lag = sql_connector.execute(query)[0]
+        last_dt = sql_connector.execute(query)[0][0]
 
-        return {
-            "today": today.strftime(self.fmt),
-            "last_day": last_day.strftime(self.fmt),
-            "lag": lag
-        }
+        return self._lag(last_dt)
 
 
 @dataclass
@@ -1029,7 +1067,7 @@ class CountGreaterValue(Metric):
             'value': self.value
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1107,7 +1145,7 @@ class CountValueInSet(Metric):
             'set': AsIs(tuple(self.required_set))
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1224,7 +1262,7 @@ class CountValueInBounds(Metric):
             'val2': self.upper_bound
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1350,7 +1388,7 @@ class CountExtremeValuesFormula(Metric):
             'coeff': self.std_coef
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1472,7 +1510,7 @@ class CountExtremeValuesQuantile(Metric):
             'per': self.q,
         }
 
-        n, k = sql_connector.execute(query, params).fetchone()
+        n, k = sql_connector.execute(query, params)[0]
         delta = 0 if n == 0 else k / n
 
         return {"total": n, "count": k, "delta": delta}
@@ -1614,7 +1652,7 @@ class CountLastDayRows(Metric):
             'column': AsIs(self.column)
         }
 
-        average, last_date_count = sql_connector.execute(query, params).fetchone()
+        average, last_date_count = sql_connector.execute(query, params)[0]
         percentage = (last_date_count / float(average)) * 100
         at_least = percentage >= self.percent
 
@@ -1777,7 +1815,7 @@ class CountFewLastDayRows(Metric):
             'percent': self.percent / 100
         }
 
-        average, days = sql_connector.execute(query, params).fetchone()
+        average, days = sql_connector.execute(query, params)[0]
 
         return {"average": float(average), "days": days}
 
@@ -2049,7 +2087,7 @@ class CheckAdversarialValidation(Metric):
             'index_col': self.column
         }
 
-        str_num_cols = sql_connector.execute(query_num_cols, params).fetchone()[0]
+        str_num_cols = sql_connector.execute(query_num_cols, params)[0][0]
         num_cols = str_num_cols.split(',')
 
         if str_num_cols is None:
@@ -2081,7 +2119,7 @@ class CheckAdversarialValidation(Metric):
             'end2': self._end_2
         }
 
-        data = np.array(sql_connector.execute(query_final, params).fetchall())
+        data = np.array(sql_connector.execute(query_final, params))
 
         first_part_size = np.sum(data[:, -1] == 0)
         second_part_size = np.sum(data[:, -1] == 1)

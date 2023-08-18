@@ -36,6 +36,8 @@ CHECKLIST1 = [
     ("views", m.CountExtremeValuesFormula("views", 1, "greater"), {"delta": (0, 0.2)}),
 
     # views table with dates from two years
+    ("two_years", m.CountLag("dt", "day", dt.datetime.strptime('2023-08-17 17:55', '%Y-%m-%d %H:%M')), {"lag": (10, 100)}),
+    ("two_years", m.CountLag("dt", "hour", dt.datetime.strptime('2023-08-17 17:55', '%Y-%m-%d %H:%M')), {"lag": (1000, 2000)}),
     ("two_years", m.CountLastDayRows("dt", 80), {"last_date_count": (1, 1e6)}),
     ("two_years", m.CountFewLastDayRows("dt", 80, 2), {"days": (1, 2)}),
     ("two_years", m.CountFewLastDayRows("dt", 80, 22), {"days": (1, 2)}),
@@ -71,6 +73,8 @@ CHECKLIST2 = [
     ("big_table", m.CountExtremeValuesQuantile("revenue", 0.05, "lower"), {"delta": (0, 0.2)},),
 
     # Table with clickstream ["dt", "item_id", "views", "clicks", "payments"]
+    ("views", m.CountLag("dt", "day", dt.datetime.strptime('2023-08-17 17:55', '%Y-%m-%d %H:%M')), {"lag": (10, 100)}),
+    ("views", m.CountLag("dt", "hour", dt.datetime.strptime('2023-08-17 17:55', '%Y-%m-%d %H:%M')), {"lag": (1000, 2000)}),
     ("views", m.CountBelowValue("views", 1000, True), {"delta": (0, 0.5)}),
     ("views", m.CountGreaterValue("views", 1000, True), {"delta": (0, 0.3)}),
     ("views", m.CountExtremeValuesFormula("views", 1, "greater"), {"delta": (0, 0.2)}),

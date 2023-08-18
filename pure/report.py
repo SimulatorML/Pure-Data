@@ -51,12 +51,12 @@ class Report:
     Properties:
         df (Pandas DataFrame):
             Get the DataFrame representation of the report:
-                `table_name`        # Checked table name
-                `metric_params`     # Metric parameters
-                `metric_values`     # Metric values for checked table
-                `limits`            # Non-strict lower and upper bound for specified metric value
-                `status`            # `.` check is passed, `F` check is not passed, `E` erorr during check
-                `error`             # Error message if check is failed, otherwise empty string
+                `table`     # Checked table name
+                `metric`    # Metric parameters
+                `metric`    # Metric values for checked table
+                `limits`    # Non-strict lower and upper bound for specified metric value
+                `status`    # `.` check is passed, `F` check is not passed, `E` erorr during check
+                `error`     # Error message if check is failed, otherwise empty string
 
         stats (Dict):
             Get the summary of the report:
@@ -109,11 +109,11 @@ class Report:
         >>> print(report)
         DQ Report for tables ['sales'], engine: `pandas`.
         +--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------+
-        | table_name   | metric_params                                          | metric_values                          | limits                  | status   | error   |
+        | table        | metric                                                 | values                                 | limits                  | status   | error   |
         |--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------|
         | sales        | CountTotal()                                           | {'total': 6}                           | 1 <= total <= 1000000.0 | .        |         |
         | sales        | CountZeros(column='qty')                               | {'total': 6, 'count': 0, 'delta': 0.0} | 0 <= delta <= 0.3       | .        |         |
-        | sales        | CountNull(columns=['price', 'qty'], aggregation='all') | {'total': 6, 'count': 0, 'delta': 0.0} | 0 <= total <= 0         | F        |         |
+        | sales        | CountNull(columns=['price', 'qty'], aggregation='all') | {'total': 6, 'count': 0, 'delta': 0.0} | total == 0              | F        |         |
         +--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------+
         Total checks: 3,  passed: 2, failed: 1, errors: 0.
     """
@@ -197,8 +197,8 @@ class Report:
                 pbar.set_postfix_str(f'{table_name}: {metric}')
 
                 row = {
-                    'table_name': table_name,
-                    'metric_params': repr(metric),
+                    'table': table_name,
+                    'metric': repr(metric),
                     'limits': str(limits),
                 }
 
@@ -234,8 +234,9 @@ class Report:
                     if limits and metric_values:
                         chk_col = list(limits.keys())[0]
                         low, high = list(limits.values())[0]
-                        str_limits = f'{low} <= {chk_col} <= {high}'
                         chk_value = metric_values.get(chk_col)
+
+                        str_limits = f'{chk_col} == {high}' if low == high else f'{low} <= {chk_col} <= {high}'
 
                         if chk_value < low or chk_value > high:
                             status = 'F'
@@ -244,7 +245,7 @@ class Report:
                     status = 'E'
                     error = str(ex)
 
-                row['metric_values'] = metric_values
+                row['values'] = metric_values
                 row['limits'] = str_limits
                 row['status'] = status
                 row['error'] = error
@@ -263,7 +264,7 @@ class Report:
 
         df = pd.DataFrame(
             data=rows,
-            columns=['table_name', 'metric_params', 'metric_values', 'limits', 'status', 'error'],
+            columns=['table', 'metric', 'values', 'limits', 'status', 'error'],
         )
 
         self._result = {

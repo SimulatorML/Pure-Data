@@ -49,6 +49,12 @@ TEST_CASES = {
             "expected_result": {"total": 21, "count": 6, "delta": 0.28571},
         },
         {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": ["qty, price, ", "any"],
+            "expected_result": {"total": 21, "count": 6, "delta": 0.28571},
+        },
+        {
             "tables_set": TABLES1,
             "table_name": "sales",
             "params": [["qty", "price"], "all"],
@@ -58,6 +64,12 @@ TEST_CASES = {
             "tables_set": TABLES2,
             "table_name": "sales",
             "params": [["qty", "price"], "all"],
+            "expected_result": {"total": 21, "count": 0, "delta": 0.0},
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": ["  qty, price, ", "all"],
             "expected_result": {"total": 21, "count": 0, "delta": 0.0},
         },
         {
@@ -81,9 +93,21 @@ TEST_CASES = {
             "expected_result": {"total": 7, "count": 1, "delta": 0.14285},
         },
         {
+            "tables_set": TABLES1,
+            "table_name": "sales",
+            "params": [", item_id,   qty,  "],
+            "expected_result": {"total": 7, "count": 1, "delta": 0.14285},
+        },
+        {
             "tables_set": TABLES2,
             "table_name": "sales",
             "params": [["item_id", "qty"]],
+            "expected_result": {"total": 21, "count": 11, "delta": 0.523809},
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": ["item_id  , qty, "],
             "expected_result": {"total": 21, "count": 11, "delta": 0.523809},
         },
     ],
@@ -217,7 +241,7 @@ TEST_CASES = {
         {
             "tables_set": TABLES2,
             "table_name": "sales",
-            "params": ["day", "%Y-%m-%d"],
+            "params": ["day"],
             "expected_result": {
                 "today": today.strftime("%Y-%m-%d"),
                 "last_day": "2022-10-31",
@@ -227,11 +251,11 @@ TEST_CASES = {
         {
             "tables_set": TABLES2,
             "table_name": "views",
-            "params": ["dt", "%Y-%m-%d"],
+            "params": ["dt", "hour", today],
             "expected_result": {
-                "today": today.strftime("%Y-%m-%d"),
-                "last_day": "2022-09-25",
-                "lag": (today - dt.datetime(2022, 9, 25)).days,
+                "today": today.strftime("%Y-%m-%d %H:%M"),
+                "last_day": "2022-09-25 00:00",
+                "lag": int((today - dt.datetime(2022, 9, 25)).total_seconds() / 3600),
             },
         },
     ],
