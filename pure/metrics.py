@@ -14,7 +14,7 @@ __all__ = [
     'CountRatioBelow',
     'CountCB',
     'CountLag',
-    'CountGreaterValue',
+    'CountAboveValue',
     'CountValueInSet',
     'CountValueInBounds',
     'CountExtremeValuesFormula',
@@ -1094,7 +1094,7 @@ class CountLag(Metric):
 
 
 @dataclass
-class CountGreaterValue(Metric):
+class CountAboveValue(Metric):
     """Number of values greater than threshold.
 
     Count values in chosen column

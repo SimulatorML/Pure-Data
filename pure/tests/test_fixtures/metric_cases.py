@@ -165,7 +165,7 @@ TEST_CASES = {
             "expected_result": {"total": 18, "count": 12, "delta": 0.66666},
         },
     ],
-    "CountGreaterValue": [
+    "CountAboveValue": [
         {
             "tables_set": TABLES1,
             "table_name": "views",
