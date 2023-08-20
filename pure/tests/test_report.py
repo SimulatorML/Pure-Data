@@ -29,7 +29,7 @@ def test_report_pandas():
         ]
 
         current_order = [
-            (row[1]["table_name"], row[1]["metric_params"]) for row in current_result.df.iterrows()
+            (row[1]["table"], row[1]["metric"]) for row in current_result.df.iterrows()
         ]
 
         # order in report and order in checklist should match
@@ -76,7 +76,7 @@ def test_report_pyspark():
         ]
 
         current_order = [
-            (row[1]["table_name"], row[1]["metric_params"]) for row in current_result.df.iterrows()
+            (row[1]["table"], row[1]["metric"]) for row in current_result.df.iterrows()
         ]
 
         # order in report and order in checklist should match
@@ -120,7 +120,7 @@ def assert_report_equals(user_report: pd.DataFrame, valid_report: pd.DataFrame) 
         assert set(user.keys()) == set(valid.keys())
         # check that metric result values in report are equal
         for key in valid.keys():
-            if key == "metric_values":
+            if key == "values":
                 assert metric_results_are_equal(user[key], valid[key])
                 continue
             assert user[key] == valid[key]

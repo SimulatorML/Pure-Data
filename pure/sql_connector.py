@@ -85,6 +85,7 @@ class PostgreSQLConnector(SQLConnector):
     def execute(self, query: str, params: Dict[str, Any] = None):
         try:
             self.cursor.execute(query, params)
+            return self.cursor.fetchall()
         except:
             self.connection.rollback()
             raise
