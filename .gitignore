@@ -2,3 +2,5 @@ __pycache__
 *.pyc
 /venv/
 local
+dist
+pure_data.egg-info
