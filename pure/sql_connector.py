@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 import clickhouse_driver
 import psycopg2
 import pymssql
+import mysql.connector
 
 
 class SQLConnector(ABC):
@@ -101,13 +102,46 @@ class PostgreSQLConnector(SQLConnector):
 
 
 class MSSQLConnector(SQLConnector):
-    """Communication with the PostgreSQL database"""
+    """Communication with the MSSQL database"""
     def __init__(self, host: str, port: int, user: str, password: str, database):
         super().__init__(host, port, user, password, database)
 
     def connect(self):
         self.connection = pymssql.connect(
             server=self.host,
+            port=self.port,
+            database=self.database,
+            user=self.user,
+            password=self.password
+        )
+
+        self.cursor = self.connection.cursor()
+
+        return self
+
+    def execute(self, query, params: Dict[str, Any] = None):
+        try:
+            self.cursor.execute(query, params)
+            return self.cursor.fetchall()
+        except:
+            raise
+
+    def close(self):
+        if self.cursor:
+            self.cursor.close()
+
+        if self.connection:
+            self.connection.close()
+
+
+class MySQLConnector(SQLConnector):
+    """Communication with the PostgreSQL database"""
+    def __init__(self, host: str, port: int, user: str, password: str, database):
+        super().__init__(host, port, user, password, database)
+
+    def connect(self):
+        self.connection = mysql.connector.connect(
+            host=self.host,
             port=self.port,
             database=self.database,
             user=self.user,
