@@ -64,6 +64,11 @@ class ClickHouseConnector(SQLConnector):
         if self.connection:
             self.connection.close()
 
+    @property
+    def engine(self) -> str:
+        """Database engine"""
+        return 'clickhouse'
+
 
 class PostgreSQLConnector(SQLConnector):
     """Communication with the PostgreSQL database"""
@@ -100,6 +105,11 @@ class PostgreSQLConnector(SQLConnector):
         if self.connection:
             self.connection.close()
 
+    @property
+    def engine(self) -> str:
+        """Database engine"""
+        return 'postgresql'
+
 
 class MSSQLConnector(SQLConnector):
     """Communication with the MSSQL database"""
@@ -133,6 +143,11 @@ class MSSQLConnector(SQLConnector):
         if self.connection:
             self.connection.close()
 
+    @property
+    def engine(self) -> str:
+        """Database engine"""
+        return 'mssql'
+
 
 class MySQLConnector(SQLConnector):
     """Communication with the PostgreSQL database"""
@@ -165,3 +180,8 @@ class MySQLConnector(SQLConnector):
 
         if self.connection:
             self.connection.close()
+
+    @property
+    def engine(self) -> str:
+        """Database engine"""
+        return 'mysql'
