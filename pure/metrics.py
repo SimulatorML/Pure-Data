@@ -1003,13 +1003,15 @@ class CountCB(Metric):
         self.ucb_per = 1 - self.alpha / 2
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
-        lcb, ucb = np.quantile(df[self.column], [self.lcb_per, self.ucb_per])
+        values = df[df[self.column].notnull()][self.column].values
+        lcb, ucb = np.quantile(values, [self.lcb_per, self.ucb_per])
 
         return {"lcb": lcb, "ucb": ucb}
 
     def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
         st = pss.sql.DataFrameStatFunctions(df)
         ci = st.approxQuantile(self.column, [self.lcb_per, self.ucb_per], 0.00001)
+
         return {"lcb": ci[0], "ucb": ci[1]}
 
     def _call_clickhouse(
