@@ -14,11 +14,13 @@ dump_big_table_1 = os.path.join(dumps_path, "big_table_1.pkl")
 dump_big_table_2 = os.path.join(dumps_path, "big_table_2.pkl")
 dump_av_table_shift = os.path.join(dumps_path, "av_table_shift.pkl")
 dump_av_table_none = os.path.join(dumps_path, "av_table_none.pkl")
+dump_ext_av_table_none = os.path.join(dumps_path, "ext_av_table_none.pkl")
 
 big_table_1 = pickle.load(open(dump_big_table_1, "rb"))
 big_table_2 = pickle.load(open(dump_big_table_2, "rb"))
 av_table_shift = pickle.load(open(dump_av_table_shift, "rb"))
 av_table_none = pickle.load(open(dump_av_table_none, "rb"))
+ext_av_table_none = pickle.load(open(dump_ext_av_table_none, "rb"))
 
 TABLES1 = {
     # Table with transactions, used to test most metrics,
@@ -131,4 +133,5 @@ TABLES2 = {
     # AV_testing table ["revenue", "qty"], values for some dates are set to None,
     # used to test AdversarialValidation metric
     "av_table_none": av_table_none,
+    "ext_av_table_none": ext_av_table_none,
 }

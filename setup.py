@@ -7,14 +7,14 @@ with open("README.md", 'r', encoding="utf-8") as f:
 
 setup(
     name='pure-data',
-    version = '0.1.5.1',
+    version = '0.1.6.1',
     author='BOGDAN PECHENKIN',
     author_email='uberkinder@yandex.com',
     description='Pure Data Framework',
     long_description=long_description,
     long_description_content_type='text/markdown',
     url = 'https://github.com/SimulatorML/Pure-Data',
-    install_requires=['numpy==1.24.3', 'pandas==2.0.0', 'pylint==2.17.2', 'pytest==7.3.1', 'scikit-learn==1.2.2', 'clickhouse_driver==0.2.6', 'psycopg2-binary==2.9.6', 'pymssql==2.2.8', 'tabulate==0.9.0', 'tqdm==4.66.1'],
+    install_requires=['numpy==1.24.3', 'pandas==2.0.0', 'pylint==2.17.2', 'pytest==7.3.1', 'scikit-learn==1.2.2', 'clickhouse_driver==0.2.6', 'psycopg2-binary==2.9.6', 'pymssql==2.2.8', 'mysql-connector-python==8.1.0', 'tabulate==0.9.0', 'tqdm==4.66.1'],
     packages=setuptools.find_packages(),
     python_requires='>=3.10',
     classifiers=[
@@ -23,4 +23,3 @@ setup(
         'Operating System :: OS Independent'
     ]
 )
-70
