@@ -22,6 +22,7 @@ __all__ = [
     'CountLastDayRows',
     'CountFewLastDayRows',
     'CheckAdversarialValidation'
+    'CountLastDayAvg'
 ]
 
 from datetime import datetime
@@ -2646,4 +2647,45 @@ class CheckAdversarialValidation(Metric):
             "similar": is_similar,
             "importances": importance_dict,
             "cv_roc_auc": score
+        }
+
+
+@dataclass
+class CountLastDayAvg(Metric):
+    """
+    Calculate average number of rows per day in chosen date column.
+    For each of the last day, check if number of rows in the day
+    is at least +- N of the average (median).
+    """
+
+    column: str
+    column_day: str = "day"
+    skip_unfinished: bool = True
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        # Skip incomplete day
+        if self.skip_unfinished:
+            df = df[df[self.column] < df[self.column].max()]
+
+        # Take max day rows
+        df = df.sort_values(by=self.column_day)
+        last_day = df[self.column_day].max()
+        last_day_df = df[df[self.column_day] == last_day]
+        last_day_avg = last_day_df[self.column].mean()
+
+        # Calculate median mean
+        df_without_last = df[df[self.column_day] < last_day]
+        daily_mean = df_without_last.groupby(
+            pd.to_datetime(df_without_last[self.column_day]).dt.date
+        )[self.column].mean()
+        print(self.column, self.column_day, daily_mean)
+        median_mean = daily_mean.median()
+
+        # Calculate percentage
+        ratio = last_day_avg / median_mean
+
+        return {
+            "median": median_mean,
+            "last": last_day_avg,
+            "ratio": ratio,
         }
