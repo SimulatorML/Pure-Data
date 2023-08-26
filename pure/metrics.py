@@ -2726,3 +2726,45 @@ class CountLastDayAvg(Metric):
             "ratio": ratio,
         }
     
+    def _call_postgresql(
+        self,
+        table_name: str,
+        sql_connector: conn.PostgreSQLConnector
+    ) -> Dict[str, Any]:
+        query = f'''
+            with groups as (
+                select {self.column}::date, count(1) as qty, row_number() over w as x
+                from {table_name}
+                group by {self.column}::date
+                window w as (
+                    order by {self.column}::date desc
+                )
+            )
+            select sum(case when x != 1 then qty else 0 end) /
+                sum(case when x != 1 then 1 else 0 end) as average,
+                max(case when x = 1 then qty else 0 end) as last_day_count
+            from groups
+        '''
+
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column)
+        }
+
+        result = sql_connector.execute(query, params)
+        average, last_date_count = result[0]
+
+        # Calculate median mean
+        daily_rows = result[1:]
+        daily_counts = [row[1] for row in daily_rows]
+        median_mean = np.median(daily_counts)
+
+        # Calculate percentage
+        ratio = last_date_count / median_mean
+
+        return {
+            "median": median_mean,
+            "last": last_date_count,
+            "ratio": ratio,
+        }
+    
