@@ -2763,8 +2763,43 @@ class CountLastDayAvg(Metric):
         ratio = last_date_count / median_mean
 
         return {
+            "average": float(average),
             "median": median_mean,
             "last": last_date_count,
             "ratio": ratio,
         }
+    
+    def _call_mssql(self, table_name: str, sql_connector: conn.MSSQLConnector) -> Dict[str, Any]:
+        query = f'''
+            with groups as (
+                select cast({self.column} as date) as day,
+                    count(1) as qty,
+                    row_number() over (order by cast({self.column} as date) desc) as x
+                from {table_name}
+                group by cast({self.column} as date)
+            )
+            select sum(case when x != 1 then cast(qty as real) else 0 end) /
+                sum(case when x != 1 then 1 else 0 end) as average,
+                max(case when x = 1 then qty else 0 end) as last_day_count
+            from groups
+        '''
+
+        result = sql_connector.execute(query)
+        average, last_date_count = result[0]
+
+        # Calculate median mean
+        daily_rows = result[1:]
+        daily_counts = [row[1] for row in daily_rows]
+        median_mean = np.median(daily_counts)
+
+        # Calculate percentage
+        ratio = last_date_count / median_mean
+
+        return {
+            "average": float(average),
+            "median": median_mean,
+            "last": last_date_count,
+            "ratio": ratio,
+        }
+    
     
