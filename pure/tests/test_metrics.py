@@ -170,13 +170,13 @@ def test_count_extreme_values_quantile_wrong_q():
 
 
 def test_count_last_day_rows_negative_percent():
-    """Test CountLastDayRows metric initialization.
+    """Test CountLastDayRowsPercent metric initialization.
 
     Test that metric initialization with
     negative 'percent' parameter value raises ValueError.
     """
     try:
-        metrics.CountLastDayRows("day", -10)
+        metrics.CountLastDayRowsPercent("day", -10)
     except ValueError:
         pass
     else:

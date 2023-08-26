@@ -214,7 +214,7 @@ TEST_CASES = {
             "expected_result": {"total": 5000, "count": 483, "delta": 0.0966},
         },
     ],
-    "CountLastDayRows": [
+    "CountLastDayRowsPercent": [
         {
             "table_name": "sales",
             "params": ["day", 80],
@@ -246,6 +246,28 @@ TEST_CASES = {
             },
         }
     ],
+    "CountLastDayRows": [
+        {
+            "table_name": "sales",
+            "params": ['day'],
+            "expected_result": {'median': 3.0, 'last': 1.0, 'ratio': 0.3333333333333333}
+        },
+        {
+            "table_name": "sales",
+            "params": ['day', False],
+            "expected_result": {'median': 3.0, 'last': 1.0, 'ratio': 0.3333333333333333}
+        },
+        {
+            "table_name": "av_table_none",
+            "params": ['index'],
+            "expected_result": {'median': 23.5, 'last': 23.0, 'ratio': 0.9787234042553191}
+        },
+        {
+            "table_name": "av_table_none",
+            "params": ['index', False],
+            "expected_result": {'median': 23.0, 'last': 24.0, 'ratio': 1.0434782608695652}
+        },
+    ],
     "CountFewLastDayRows": [
         {
             "table_name": "sales",
@@ -262,6 +284,48 @@ TEST_CASES = {
             "params": ["dt", 80, 2],
             "expected_result": {"average": 3, "days": 2},
         }
+    ],
+    "CountLastDayAvg": [
+        {
+            "table_name": "sales",
+            "params": ['qty', 'day'],
+            "expected_result": {'median': 3.458333333333333, 'last': 8.0, 'ratio': 2.313253012048193}
+        },
+        {
+            "table_name": "sales",
+            "params": ['qty', 'day', False],
+            "expected_result": {'median': 3.6666666666666665, 'last': 1.0, 'ratio': 0.27272727272727276}
+        },
+        {
+            "table_name": "sales",
+            "params": ['revenue', 'day'],
+            "expected_result": {'median': 533.3333333333333, 'last': 160.0, 'ratio': 0.30000000000000004}
+        },
+        {
+            "table_name": "sales",
+            "params": ['revenue', 'day', False],
+            "expected_result": {'median': 526.6666666666666, 'last': 1000.0, 'ratio': 1.89873417721519}
+        },
+        {
+            "table_name": "av_table_none",
+            "params": ['qty', 'index'],
+            "expected_result": {'median': 49.95969498910675, 'last': 50.30434782608695, 'ratio': 1.0068986177168486}
+        },
+        {
+            "table_name": "av_table_none",
+            "params": ['qty', 'index', False],
+            "expected_result": {'median': 50.03703703703704, 'last': 48.5, 'ratio': 0.9692820133234641}
+        },
+        {
+            "table_name": "av_table_none",
+            "params": ['revenue', 'index'],
+            "expected_result": {'median': 550.6508563899868, 'last': 427.2173913043478, 'ratio': 0.7758407824971767}
+        },
+        {
+            "table_name": "av_table_none",
+            "params": ['revenue', 'index', False],
+            "expected_result": {'median': 550.6060606060606, 'last': 605.0833333333334, 'ratio': 1.0989405613648873}
+        },
     ],
     "CheckAdversarialValidation": [
         {

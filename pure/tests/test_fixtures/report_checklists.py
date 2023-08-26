@@ -38,7 +38,7 @@ CHECKLIST1 = [
     # views table with dates from two years
     ("two_years", m.CountLag("dt", "day", dt.datetime.strptime('2023-08-17 17:55', '%Y-%m-%d %H:%M')), {"lag": (10, 100)}),
     ("two_years", m.CountLag("dt", "hour", dt.datetime.strptime('2023-08-17 17:55', '%Y-%m-%d %H:%M')), {"lag": (1000, 2000)}),
-    ("two_years", m.CountLastDayRows("dt", 80), {"last_date_count": (1, 1e6)}),
+    ("two_years", m.CountLastDayRowsPercent("dt", 80), {"last_date_count": (1, 1e6)}),
     ("two_years", m.CountFewLastDayRows("dt", 80, 2), {"days": (1, 2)}),
     ("two_years", m.CountFewLastDayRows("dt", 80, 22), {"days": (1, 2)}),
 
@@ -66,7 +66,7 @@ CHECKLIST2 = [
     ("sales", m.CountValueInSet("pay_card", ["unionpay", "mastercard", "visa"]), {"delta": (0.7, 1.0)}, ),
     ("sales", m.CountValueInBounds("qty", 1, 8, True), {"count": (0, 2)}),
     ("sales", m.CountValueInBounds("qty", 1, 8, True), {"delta": (0, 0.5)}),
-    ("sales", m.CountLastDayRows("day", 35), {}),
+    ("sales", m.CountLastDayRowsPercent("day", 35), {}),
 
     # big_table ["revenue"]
     ("big_table", m.CountCB("revenue", 0.8), {}),
@@ -78,7 +78,7 @@ CHECKLIST2 = [
     ("views", m.CountBelowValue("views", 1000, True), {"delta": (0, 0.5)}),
     ("views", m.CountAboveValue("views", 1000, True), {"delta": (0, 0.3)}),
     ("views", m.CountExtremeValuesFormula("views", 1, "greater"), {"delta": (0, 0.2)}),
-    ("views", m.CountLastDayRows("dt", 80), {"percentage": (50, 100)}),
+    ("views", m.CountLastDayRowsPercent("dt", 80), {"percentage": (50, 100)}),
     ("views", m.CountFewLastDayRows("dt", 80, 2), {"days": (1, 2)}),
 
     # av_testing table ["revenue", "qty"], values for some dates are set to None
