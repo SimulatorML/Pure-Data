@@ -2689,3 +2689,40 @@ class CountLastDayAvg(Metric):
             "last": last_day_avg,
             "ratio": ratio,
         }
+    
+    def _call_clickhouse(
+        self,
+        table_name: str,
+        sql_connector: conn.ClickHouseConnector
+    ) -> Dict[str, Any]:
+        query = f'''
+            with groups as (
+                select {self.column}::date, count(1) as qty, row_number() over w as x
+                from {table_name}
+                group by {self.column}::date
+                window w as (
+                    order by {self.column}::date desc
+                )
+            )
+            select sum(qty) filter(where x != 1) / count(1) filter(where x != 1) as average,
+                max(qty) filter(where x = 1) as last_day_count
+            from groups
+        '''
+
+        result = sql_connector.execute(query)
+        average, last_date_count = result[0]
+
+        # Calculate median mean
+        daily_rows = result[1:]
+        daily_counts = [row[1] for row in daily_rows]
+        median_mean = np.median(daily_counts)
+
+        # Calculate percentage
+        ratio = last_date_count / median_mean
+
+        return {
+            "median": median_mean,
+            "last": last_date_count,
+            "ratio": ratio,
+        }
+    
