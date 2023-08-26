@@ -246,6 +246,28 @@ TEST_CASES = {
             },
         }
     ],
+    "CountLastDayRows": [
+        {
+            "table_name": "sales",
+            "params": ['day'],
+            "expected_result": {'median': 3.0, 'last': 1.0, 'ratio': 0.3333333333333333}
+        },
+        {
+            "table_name": "sales",
+            "params": ['day', False],
+            "expected_result": {'median': 3.0, 'last': 1.0, 'ratio': 0.3333333333333333}
+        },
+        {
+            "table_name": "av_table_none",
+            "params": ['index'],
+            "expected_result": {'median': 23.5, 'last': 23.0, 'ratio': 0.9787234042553191}
+        },
+        {
+            "table_name": "av_table_none",
+            "params": ['index', False],
+            "expected_result": {'median': 23.0, 'last': 24.0, 'ratio': 1.0434782608695652}
+        },
+    ],
     "CountFewLastDayRows": [
         {
             "table_name": "sales",

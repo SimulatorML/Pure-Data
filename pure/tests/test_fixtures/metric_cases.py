@@ -475,6 +475,32 @@ TEST_CASES = {
             "expected_result": {'median': 550.6060606060606, 'last': 605.0833333333334, 'ratio': 1.0989405613648873}
         },
     ],
+    "CountLastDayRows": [
+        {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": ['day'],
+            "expected_result": {'median': 3.0, 'last': 1.0, 'ratio': 0.3333333333333333}
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "sales",
+            "params": ['day', False],
+            "expected_result": {'median': 3.0, 'last': 1.0, 'ratio': 0.3333333333333333}
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "ext_av_table_none",
+            "params": ['index'],
+            "expected_result": {'median': 23.5, 'last': 23.0, 'ratio': 0.9787234042553191}
+        },
+        {
+            "tables_set": TABLES2,
+            "table_name": "ext_av_table_none",
+            "params": ['index', False],
+            "expected_result": {'median': 23.0, 'last': 24.0, 'ratio': 1.0434782608695652}
+        },
+    ],
     "CheckAdversarialValidation": [
         {
             "tables_set": TABLES1,

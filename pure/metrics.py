@@ -20,6 +20,7 @@ __all__ = [
     'CountExtremeValuesFormula',
     'CountExtremeValuesQuantile',
     'CountLastDayRowsPercent',
+    'CountLastDayRows',
     'CountFewLastDayRows',
     'CountLastDayAvg',
     'CheckAdversarialValidation'
@@ -2041,6 +2042,259 @@ class CountLastDayRowsPercent(Metric):
 
 
 @dataclass
+class CountLastDayRows(Metric):
+    """
+    A metric class for calculating statistics related to the last day's data in a DataFrame.
+
+    This class calculates the median count of rows for each day (excluding the last day),
+    the number of rows on the last day
+    and the ratio of the last day's row count to the median count of previous days.
+
+    Attributes:
+        column (str): The column in the DataFrame containing the date/datetime information.
+        skip_unfinished (bool): If True, incomplete last day rows are skipped during calculations.
+
+    Returns:
+        dict: A dictionary containing calculated metrics:
+            - "median": The median count of rows for each day (excluding the last day).
+            - "last": Rows count for the last available day.
+            - "ratio": last / median.
+
+    Raises:
+        ValueError: If there are None/nan values in the specified column_day.
+    """
+
+    column: str = "day"
+    skip_unfinished: bool = True
+
+    def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
+        empty_rows_qty = np.sum(df[self.column].isna())
+
+        if empty_rows_qty != 0:
+            raise ValueError(f"None/nan values in column: {self.column}.")
+
+        # Skip incomplete day
+        if self.skip_unfinished:
+            last_day = pd.to_datetime(df[self.column]).dt.date.max()
+            df = df[pd.to_datetime(df[self.column]).dt.date < last_day]
+
+        df = df.sort_values(by=self.column)
+
+        # Take max day rows
+        last_day = pd.to_datetime(df[self.column]).dt.date.max()
+        last_day_rows = len(df[pd.to_datetime(df[self.column]).dt.date == last_day])
+
+        # Calculate median
+        df_without_last = df[pd.to_datetime(df[self.column]).dt.date < last_day]
+        daily_rows = df_without_last.groupby(
+            pd.to_datetime(df_without_last[self.column]).dt.date
+        ).size()
+
+        median_count = daily_rows.median()
+
+        # Calculate ratio
+        ratio = last_day_rows / median_count
+
+        return {
+            "median": median_count,
+            "last": last_day_rows,
+            "ratio": ratio,
+        }
+
+    def _call_pyspark(self, pss: PySparkSingleton, df: ps.DataFrame) -> Dict[str, Any]:
+        empty_rows_qty = df.filter(pss.func.col(self.column).isNull()).count()
+
+        if empty_rows_qty != 0:
+            raise ValueError(f"None/nan values in column: {self.column}.")
+
+        # Skip incomplete day
+        if self.skip_unfinished:
+            last_day = df.agg(pss.func.max(pss.func.to_date(self.column))).collect()[0][0]
+            df = df.filter(df[self.column] < last_day)
+
+        # rows count for last day
+        last_day = df.agg(pss.func.max(pss.func.to_date(self.column))).collect()[0][0]
+        last_day_rows = df.filter(pss.func.to_date(df[self.column]) == last_day).count()
+
+        # median for daily means of `column`, except last day
+        df_without_last = df.filter(
+            pss.func.to_date(df[self.column]) < last_day
+        ).select(self.column)
+
+        daily_mean = df_without_last.\
+            groupBy(pss.func.to_date(df_without_last[self.column])).count()
+
+        median_count = np.median(
+            np.array(daily_mean.select('count').collect()).reshape(-1)
+        )
+
+        # Calculate ratio
+        ratio = last_day_rows / median_count
+
+        return {
+            "median": median_count,
+            "last": last_day_rows,
+            "ratio": ratio,
+        }
+
+    def _call_clickhouse(self, table_name: str, sql_connector: conn.ClickHouseConnector) -> Dict[str, Any]:
+        query = f'''
+            with daily_rows as (
+                select toDate({self.column}, 'UTC') as day_, count(1) as qty,
+                    row_number() over (order by toDate({self.column}, 'UTC')) as day_id,
+                    count(1) over () as days
+                from {table_name}
+                group by toDate({self.column}, 'UTC')
+            ),
+            result as (
+                select day_, qty, day_id, days - toInt32(%(skip)s) as result_days
+                from daily_rows
+                where day_id < days or %(skip)s=false
+            )
+            select max(qty) filter (where day_id = result_days) as last_day_count,
+                quantile(0.5)(qty) filter(where day_id < result_days) as median
+            from result
+        '''
+
+        params = {
+            'skip': self.skip_unfinished
+        }
+
+        last_day_rows, median_count = sql_connector.execute(query, params)[0]
+
+        ratio = last_day_rows / median_count
+
+        return {
+            "median": float(median_count),
+            "last": float(last_day_rows),
+            "ratio": float(ratio)
+        }
+
+    def _call_postgresql(self, table_name: str, sql_connector: conn.PostgreSQLConnector) -> Dict[str, Any]:
+        query = '''
+            with daily_rows as (
+                select %(column)s::date as day, count(1) as qty,
+                    row_number() over (order by %(column)s::date) as day_id,
+                    count(1) over () as days
+                from %(table)s
+                group by %(column)s::date
+            ),
+            result as (
+                select day, qty, day_id, days - %(skip)s::int as days
+                from daily_rows
+                where day_id < days or %(skip)s=false
+            )
+            select max(qty) filter (where day_id = days) as last_day_count,
+                percentile_cont(0.5) within group(order by qty) filter(where day_id < days) as median
+            from result
+        '''
+
+        params = {
+            'table': AsIs(table_name),
+            'column': AsIs(self.column),
+            'skip': self.skip_unfinished
+        }
+
+        last_day_rows, median_count = sql_connector.execute(query, params)[0]
+
+        ratio = float(last_day_rows) / float(median_count)
+
+        return {
+            "median": float(median_count),
+            "last": float(last_day_rows),
+            "ratio": ratio,
+        }
+
+    def _call_mssql(self, table_name: str, sql_connector: conn.MSSQLConnector) -> Dict[str, Any]:
+        query = f'''
+            with daily_rows as (
+                select cast([{self.column}] as date) as day, count(1) as qty,
+                    row_number() over (order by cast([{self.column}] as date)) as day_id,
+                    count(1) over () as days
+                from {table_name}
+                group by cast([{self.column}] as date)
+            ),
+            result as (
+                select day, qty, day_id, days - %(skip)s as days
+                from daily_rows
+                where day_id < days or %(skip)s=0
+            ),
+            last_day_count as (
+                select qty
+                from result
+                where day_id = days
+            )
+            select distinct l.qty as last_day_count,
+                percentile_cont(0.5) within group(order by r.qty) over() as median
+            from result r, last_day_count l
+            where r.day_id < r.days
+        '''
+
+        params = {
+            'skip': int(self.skip_unfinished)
+        }
+
+        last_day_rows, median_count = sql_connector.execute(query, params)[0]
+
+        ratio = last_day_rows / median_count
+
+        return {
+            "median": float(median_count),
+            "last": float(last_day_rows),
+            "ratio": float(ratio)
+        }
+
+    def _call_mysql(self, table_name: str, sql_connector: conn.MySQLConnector) -> Dict[str, Any]:
+        query = f'''
+            with daily_rows as (
+                select cast(`{self.column}` as date) as day, count(1) as qty,
+                    row_number() over (order by cast(`{self.column}` as date)) as day_id,
+                    count(1) over () as days
+                from {table_name}
+                group by cast(`{self.column}` as date)
+            ),
+            result as (
+                select day, qty, day_id, days - cast(%(skip)s as unsigned) as days
+                from daily_rows
+                where day_id < days or %(skip)s=false
+            ),
+            last_day_count as (
+                select qty
+                from result
+                where day_id=days
+            ),
+            other_days as (
+                select qty, row_number() over (order by qty) as qty_id
+                from result
+                where day_id < days
+            ),
+            median_pos as (
+                select case when (count(1) mod 2) = 0 then (count(1) div 2) else (count(1) div 2) + 1 end as start_idx,
+                    (count(1) div 2) + 1 as end_idx
+                from other_days
+            )
+            select l.qty as last_day_count, avg(d.qty) as median
+            from last_day_count l, other_days d, median_pos p
+            where d.qty_id between p.start_idx and p.end_idx
+            group by l.qty
+        '''
+
+        params = {
+            'skip': self.skip_unfinished
+        }
+
+        last_day_rows, median_count = sql_connector.execute(query, params)[0]
+
+        ratio = last_day_rows / median_count
+
+        return {
+            "median": float(median_count),
+            "last": float(last_day_rows),
+            "ratio": float(ratio)
+        }
+
+
+@dataclass
 class CountFewLastDayRows(Metric):
     """
     Calculate average number of rows per day in chosen date column.
@@ -2653,9 +2907,24 @@ class CheckAdversarialValidation(Metric):
 @dataclass
 class CountLastDayAvg(Metric):
     """
-    Calculate average number of rows per day in chosen date column.
-    For each of the last day, check if number of rows in the day
-    is at least +- N of the average (median).
+    A class for calculating metrics based on the average value of a specified column,
+    considering the last day's value and the median of daily means of that column.
+
+    Parameters:
+        column (str): The name of the column for which metrics will be calculated.
+        column_day (str, optional): The name of the column containing date/datetime information.
+            Default is "day".
+        skip_unfinished (bool, optional): If True, incomplete last day will be skipped
+            in calculations. Default is True.
+
+    Returns:
+        dict: A dictionary containing calculated metrics:
+            - "median": The median of daily means of the specified column.
+            - "last": The average value of the specified column for the last available day.
+            - "ratio": The ratio of the last day's average to the median of daily means.
+
+    Raises:
+        ValueError: If there are None/nan values in the specified column_day.
     """
 
     column: str
