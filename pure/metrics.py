@@ -19,7 +19,7 @@ __all__ = [
     'CountValueInBounds',
     'CountExtremeValuesFormula',
     'CountExtremeValuesQuantile',
-    'CountLastDayRows',
+    'CountLastDayRowsPercent',
     'CountFewLastDayRows',
     'CountLastDayAvg',
     'CheckAdversarialValidation'
@@ -1864,7 +1864,7 @@ class CountExtremeValuesQuantile(Metric):
 
 
 @dataclass
-class CountLastDayRows(Metric):
+class CountLastDayRowsPercent(Metric):
     """Check if number of values in last day is at least 'percent'% of the average.
 
     Calculate average number of rows per day in chosen date column.

@@ -353,7 +353,7 @@ TEST_CASES = {
             "expected_result": {"total": 10000, "count": 489, "delta": 0.0489},
         },
     ],
-    "CountLastDayRows": [
+    "CountLastDayRowsPercent": [
         {
             "tables_set": TABLES2,
             "table_name": "sales",

@@ -55,7 +55,7 @@ TABLES1 = {
     # Big table 10_000 samples, used to test quantile metrics
     "big_table": big_table_1,
     # Views table with dates from two years,
-    # used to test CountLastDayRows and CountFewLastDayRows metrics
+    # used to test CountLastDayRowsPercent and CountFewLastDayRows metrics
     "two_years": pd.DataFrame(
         [
             ["2022-09-24", 100, 1000, 219, 56],
