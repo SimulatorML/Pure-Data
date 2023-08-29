@@ -1,0 +1,240 @@
+
+
+<!doctype html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Report &#8212; Pure-Data  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=649a27d8" />
+    <link rel="stylesheet" type="text/css" href="_static/bizstyle.css?v=532c1bf3" />
+    
+    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/bizstyle.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Metrics" href="metrics.html" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <!--[if lt IE 9]>
+    <script src="_static/css3-mediaqueries.js"></script>
+    <![endif]-->
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="metrics.html" title="Metrics"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Pure-Data  documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Report</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="module-pure.report">
+<span id="report"></span><h1>Report<a class="headerlink" href="#module-pure.report" title="Link to this heading">¶</a></h1>
+<p>Data Quality (DQ) Reporting Module</p>
+<p>This module defines the <cite>Report</cite> class, which facilitates the generation of data quality reports
+based on a checklist of metrics and corresponding tables. The class supports various engines
+for data processing, including ‘pandas’, ‘pyspark’, ‘postgresql’, ‘clickhouse’, ‘mssql’ and <cite>mysql</cite>.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="pure.report.Report">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pure.report.</span></span><span class="sig-name descname"><span class="pre">Report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">pd.DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">ps.DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checklist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">CheckType</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'pandas'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decimal_places</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table_max_col_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pure.report.Report" title="Link to this definition">¶</a></dt>
+<dd><p>A class for generating a data quality report based on specified tables, metrics, and checklist.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>tables (Dict[str, Union[pd.DataFrame, ps.DataFrame, str]]):</dt><dd><p>A dictionary of table names mapped to pandas DataFrames, PySpark DataFrames, or table identifiers.</p>
+</dd>
+<dt>checklist (List[CheckType]):</dt><dd><dl class="simple">
+<dt>Each tuple contains (table_name, metric_function, limits), where:</dt><dd><ul class="simple">
+<li><p>table_name (str): The name of the table to be checked.</p></li>
+<li><p>metric_function (Callable): The function to compute the metric for the check.</p></li>
+<li><p>limits (Optional[Dict[str, Tuple[float, float]]]): Limits for the metric, if applicable.</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>engine (str, optional):</dt><dd><p>The processing engine to use for executing the metrics. Supported engines:
+‘pandas’, ‘pyspark’, ‘postgresql’, ‘clickhouse’, ‘mssql’. Defaults to ‘pandas’.</p>
+</dd>
+<dt>decimal_places (int, optional):</dt><dd><p>The number of decimal places to round numeric metric values to. Must be in the range [0, 8].
+Defaults to 3.</p>
+</dd>
+<dt>table_max_col_width (int, optional):</dt><dd><p>Limits the maximum number of characters in a table column when printing a report.
+For <cite>None</cite> value - column width is unlimited and varies depending on its content.</p>
+</dd>
+<dt>verbose (bool, optional):</dt><dd><p>If True, prints verbose output during metric calculations. Defaults to False.</p>
+</dd>
+</dl>
+</dd>
+<dt>Properties:</dt><dd><dl class="simple">
+<dt>df (Pandas DataFrame):</dt><dd><dl class="simple">
+<dt>Get the DataFrame representation of the report:</dt><dd><ul class="simple">
+<li><p>table:      Checked table name</p></li>
+<li><p>metric:     Metric parameters</p></li>
+<li><p>metric:     Metric values for checked table</p></li>
+<li><p>limits:     Non-strict lower and upper bound for specified metric value</p></li>
+<li><p>status:     <cite>.</cite> check is passed, <cite>F</cite> check is not passed, <cite>E</cite> erorr during check</p></li>
+<li><p>error:      Error message if check is failed, otherwise empty string</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>stats (Dict):</dt><dd><dl class="simple">
+<dt>Get the summary of the report:</dt><dd><ul class="simple">
+<li><p>tables: List[str], List of table names</p></li>
+<li><p>total: int, Total number of checks performed</p></li>
+<li><p>passed: int, Number of checks passed</p></li>
+<li><p>failed: int, Number of checks failed</p></li>
+<li><p>errors: int  Number of checks with errors</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd>
+<dt>Raises:</dt><dd><dl class="simple">
+<dt>NotImplementedError:</dt><dd><p>If the specified engine is not supported.</p>
+</dd>
+<dt>ValueError:</dt><dd><ul class="simple">
+<li><p>If the checklist is empty.</p></li>
+<li><p>If the tables dictionary is empty.</p></li>
+<li><p>If table_max_col_width is not within the valid range [8, 1024].</p></li>
+<li><p>If decimal_places is not within the valid range [0, 8].</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Report:</dt><dd><p>A Report instance containing the generated data quality report.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="pure.report.Report.clear_cache">
+<span class="sig-name descname"><span class="pre">clear_cache</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pure.report.Report.clear_cache" title="Link to this definition">¶</a></dt>
+<dd><p>Clear the cached results for this instance.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pure.report.Report.df">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">df</span></span><a class="headerlink" href="#pure.report.Report.df" title="Link to this definition">¶</a></dt>
+<dd><p>Get the DataFrame representation of the report.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>pandas.DataFrame: The DataFrame containing the report data.</p>
+</dd>
+<dt>Raises:</dt><dd><p>ValueError: If the report is empty (no entries found).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pure.report.Report.stats">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stats</span></span><a class="headerlink" href="#pure.report.Report.stats" title="Link to this definition">¶</a></dt>
+<dd><p>Get the summary of the report.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>dict: A dictionary containing statistics about the report.</dt><dd><ul class="simple">
+<li><p>tables (List[str]): List of table names covered in the report.</p></li>
+<li><p>total (int): Total number of checks performed.</p></li>
+<li><p>passed (int): Number of checks that passed successfully.</p></li>
+<li><p>failed (int): Number of checks that failed.</p></li>
+<li><p>errors (int): Number of checks that encountered errors.</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Raises:</dt><dd><p>ValueError: If the report is empty (no entries found).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Report</a><ul>
+<li><a class="reference internal" href="#pure.report.Report"><code class="docutils literal notranslate"><span class="pre">Report</span></code></a><ul>
+<li><a class="reference internal" href="#pure.report.Report.clear_cache"><code class="docutils literal notranslate"><span class="pre">Report.clear_cache()</span></code></a></li>
+<li><a class="reference internal" href="#pure.report.Report.df"><code class="docutils literal notranslate"><span class="pre">Report.df</span></code></a></li>
+<li><a class="reference internal" href="#pure.report.Report.stats"><code class="docutils literal notranslate"><span class="pre">Report.stats</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="metrics.html"
+                          title="previous chapter">Metrics</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/report.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="metrics.html" title="Metrics"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Pure-Data  documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Report</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+    &#169; Copyright 2023, BOGDAN PECHENKIN.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.4.
+    </div>
+  </body>
+</html>
