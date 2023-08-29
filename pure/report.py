@@ -1,4 +1,10 @@
-"""Valid report."""
+"""
+Data Quality (DQ) Reporting Module
+
+This module defines the `Report` class, which facilitates the generation of data quality reports
+based on a checklist of metrics and corresponding tables. The class supports various engines
+for data processing, including 'pandas', 'pyspark', 'postgresql', 'clickhouse', 'mssql' and `mysql`.
+"""
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -31,7 +37,6 @@ class Report:
         tables (Dict[str, Union[pd.DataFrame, ps.DataFrame, str]]):
             A dictionary of table names mapped to pandas DataFrames, PySpark DataFrames, or table identifiers.
         checklist (List[CheckType]):
-            A list of tuples containing the table name, metric function, and optional limits for each metric.
             Each tuple contains (table_name, metric_function, limits), where:
                 - table_name (str): The name of the table to be checked.
                 - metric_function (Callable): The function to compute the metric for the check.
@@ -51,20 +56,20 @@ class Report:
     Properties:
         df (Pandas DataFrame):
             Get the DataFrame representation of the report:
-                `table`     # Checked table name
-                `metric`    # Metric parameters
-                `metric`    # Metric values for checked table
-                `limits`    # Non-strict lower and upper bound for specified metric value
-                `status`    # `.` check is passed, `F` check is not passed, `E` erorr during check
-                `error`     # Error message if check is failed, otherwise empty string
+                - table:      Checked table name
+                - metric:     Metric parameters
+                - metric:     Metric values for checked table
+                - limits:     Non-strict lower and upper bound for specified metric value
+                - status:     `.` check is passed, `F` check is not passed, `E` erorr during check
+                - error:      Error message if check is failed, otherwise empty string
 
         stats (Dict):
             Get the summary of the report:
-                'tables': List[str],  # List of table names
-                'total': int,          # Total number of checks performed
-                'passed': int,         # Number of checks passed
-                'failed': int,         # Number of checks failed
-                'errors': int          # Number of checks with errors
+                - tables: List[str], List of table names
+                - total: int, Total number of checks performed
+                - passed: int, Number of checks passed
+                - failed: int, Number of checks failed
+                - errors: int  Number of checks with errors
 
     Raises:
         NotImplementedError:
@@ -78,44 +83,6 @@ class Report:
     Returns:
         Report:
             A Report instance containing the generated data quality report.
-
-    Examples:
-        See `examples` folder for more complex reports for various engines.
-        >>> import pandas as pd
-        >>> from pure.report import Report
-        >>> import pure.metrics as m
-        >>>
-        >>> sales = pd.DataFrame(
-        >>>     [
-        >>>         ["2022-10-21", 100, None, 120.0, 500.0, "visa"],
-        >>>         ["2022-10-21", 100, 6, 120.0, 720.0, "visa"],
-        >>>         ["2022-10-21", 200, 2, 200.0, 400.0, None],
-        >>>         ["2022-10-22", 300, None, 85.0, 850.0, "unionpay"],
-        >>>         ["2022-10-22", 100, 3, 110.0, 330.0, "tinkoff"],
-        >>>         ["2022-10-22", 200, None, 200.0, 1600.0, "paypal"]
-        >>>     ],
-        >>>     columns=["day", "item_id", "qty", "price", "revenue", "pay_card"]
-        >>> )
-        >>>
-        >>> checklist = [
-        >>>     ("sales", m.CountTotal(), {"total": (1, 1e6)}),
-        >>>     ("sales", m.CountZeros("qty"), {"delta": (0, 0.3)}),
-        >>>     ("sales", m.CountNull(["price", "qty"], "all"), {"total": (0, 0)})
-        >>> ]
-        >>>
-        >>> tables = {'sales': sales}
-        >>>
-        >>> report = Report(tables, checklist, engine='pandas')
-        >>> print(report)
-        DQ Report for tables ['sales'], engine: `pandas`.
-        +--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------+
-        | table        | metric                                                 | values                                 | limits                  | status   | error   |
-        |--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------|
-        | sales        | CountTotal()                                           | {'total': 6}                           | 1 <= total <= 1000000.0 | .        |         |
-        | sales        | CountZeros(column='qty')                               | {'total': 6, 'count': 0, 'delta': 0.0} | 0 <= delta <= 0.3       | .        |         |
-        | sales        | CountNull(columns=['price', 'qty'], aggregation='all') | {'total': 6, 'count': 0, 'delta': 0.0} | total == 0              | F        |         |
-        +--------------+--------------------------------------------------------+----------------------------------------+-------------------------+----------+---------+
-        Total checks: 3,  passed: 2, failed: 1, errors: 0.
     """
     tables: Dict[str, Union[pd.DataFrame, ps.DataFrame, str]]
     checklist: List[CheckType]
@@ -130,7 +97,7 @@ class Report:
     def __post_init__(self):
         """
         Perform post-initialization checks and validations:
-            - If the provided `engine` is supported among ['pandas', 'pyspark', 'postgresql', 'clickhouse', 'mssql'].
+            - If the provided `engine` is supported among ['pandas', 'pyspark', 'postgresql', 'clickhouse', 'mssql', 'mysql'].
             - If the `checklist` is not empty.
             - If the `tables` dictionary is not empty.
             - If the `decimal_places` value is within the valid range [0, 8].
@@ -140,12 +107,12 @@ class Report:
             NotImplementedError: If the provided `engine` is not supported.
             ValueError: If the `checklist` is empty, `tables` is empty, `table_max_col_width` or `decimal_places` is not within the valid range.
         """
-        supported_engines = {'pandas', 'pyspark', 'postgresql', 'clickhouse', 'mssql'}
+        supported_engines = {'pandas', 'pyspark', 'postgresql', 'clickhouse', 'mssql', 'mysql'}
 
         if self.engine not in supported_engines:
             err_msg = (
                 f'Not supported engine: `{self.engine}`.\n'
-                f'Use one of these engines: `pandas`, `pyspark`, `postgresql`, `clickhouse`, `mssql`.'
+                f'Use one of these engines: `pandas`, `pyspark`, `postgresql`, `clickhouse`, `mssql`, `mysql`.'
             )
             raise NotImplementedError(err_msg)
 
@@ -304,13 +271,13 @@ class Report:
 
         try:
             if self.engine == 'clickhouse':
-                connector = conn.ClickHouseConnector(**params)
+                connector = conn.ClickHouseConnector(params)
 
             if self.engine == 'postgresql':
-                connector = conn.PostgreSQLConnector(**params)
+                connector = conn.PostgreSQLConnector(params)
 
             if self.engine == 'mssql':
-                connector = conn.MSSQLConnector(**params)
+                connector = conn.MSSQLConnector(params)
 
             if connector is not None:
                 result['conn'] = connector
@@ -365,11 +332,11 @@ class Report:
 
         Returns:
             dict: A dictionary containing statistics about the report.
-                - 'tables' (List[str]): List of table names covered in the report.
-                - 'total' (int): Total number of checks performed.
-                - 'passed' (int): Number of checks that passed successfully.
-                - 'failed' (int): Number of checks that failed.
-                - 'errors' (int): Number of checks that encountered errors.
+                - tables (List[str]): List of table names covered in the report.
+                - total (int): Total number of checks performed.
+                - passed (int): Number of checks that passed successfully.
+                - failed (int): Number of checks that failed.
+                - errors (int): Number of checks that encountered errors.
 
         Raises:
             ValueError: If the report is empty (no entries found).

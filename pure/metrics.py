@@ -1,4 +1,14 @@
-"""Valid metrics."""
+"""
+This module provides various metrics for analyzing data in different engines and data sources.
+
+Supported Engines:
+    - pandas: Use local pandas DataFrames for calculation.
+    - pyspark: Utilize PySpark for distributed computing on DataFrames.
+    - clickhouse: Perform calculations using ClickHouse database.
+    - postgresql: Perform calculations using PostgreSQL database.
+    - mssql: Perform calculations using Microsoft SQL Server database.
+    - mysql: Perform calculations using MySQL database.
+"""
 
 from __future__ import annotations
 
@@ -109,7 +119,13 @@ class Metric:
 
 @dataclass
 class CountTotal(Metric):
-    """Total number of rows in DataFrame."""
+    """
+    A metric to calculate the count of rows in dataframe or database table.
+
+    Returns:
+        A dictionary containing the following metrics:
+            - total: Total number of rows.
+    """
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         return {"total": len(df)}
@@ -154,9 +170,15 @@ class CountTotal(Metric):
 
 @dataclass
 class CountZeros(Metric):
-    """Number of zeros in chosen column.
+    """
+    A metric to calculate the count of rows in dataframe or database table
+    where the value in the chosen column is equal to zero.
 
-    Count rows where value in chosen column is equal to zero.
+    Returns:
+        A dictionary containing the following metrics:
+            - total: Total number of rows.
+            - count: Number of rows where the value in the chosen column is zero.
+            - delta: Proportion of rows with zeros in the chosen column (count / total).
     """
 
     column: str
@@ -238,13 +260,21 @@ class CountZeros(Metric):
 @dataclass
 class CountNull(Metric):
     """
-    Number of empty values in chosen columns.
-    Columns can be passed as list of strings or string with comma separated values.
+    A metric to calculate the count of rows in a dataframe or database table
+    where specific columns contain null values.
 
-    If 'aggregation' == 'any', then count rows where
-    at least one value from defined 'columns' set is Null.
-    If 'aggregation' == 'all', then count rows where
-    all values from defined 'columns' set are Null.
+    Parameters:
+        - columns (Union[List[str], str]): List of column names or a comma-separated string of column names to analyze.
+        - aggregation (str, optional): Aggregation mode for counting null values. Either "all" or "any". Default is "any".
+
+    Raises:
+        ValueError: If the aggregation mode is not "all" or "any", or if the columns are not provided or are empty.
+
+    Returns:
+        dict: A dictionary containing the following metrics:
+            - total (int): The total number of rows.
+            - count (int): The count of rows with null values in the specified columns.
+            - delta (float): The ratio of rows with null values to the total number of rows.
     """
 
     columns: Union[List[str], str]
@@ -359,8 +389,21 @@ class CountNull(Metric):
 @dataclass
 class CountDuplicates(Metric):
     """
-    Number of duplicates in chosen columns.
-    Columns can be passed as list of strings or string with comma separated values.
+    A metric to calculate the count of duplicate rows in dataframe or database table.
+
+    Args:
+        columns (Union[List[str], str]): A list of column names or
+        a comma-separated string of column names on which to identify duplicates.
+
+    Raises:
+        ValueError: If an empty list or a string without comma-separated columns is provided.
+
+    Returns:
+        dict:
+            A dictionary containing the following metrics:
+                - total (int): Total number of rows.
+                - count (int): Count of duplicate rows.
+                - delta (float): Ratio of duplicate rows to total rows.
     """
 
     columns: Union[List[str], str]
@@ -466,8 +509,23 @@ class CountDuplicates(Metric):
 @dataclass
 class CountUnique(Metric):
     """
-    Number of unique rows in chosen columns.
-    Columns can be passed as list of strings or string with comma separated values.
+    A metric to calculate the count of unique rows in chosen columns of a dataframe or database table.
+
+    Parameters:
+        Union[List[str], str]
+            A list of column names or a comma-separated string of column names to be considered.
+
+    Raises:
+        ValueError
+            If an empty list or a string without comma-separated columns is passed.
+
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing the following metrics:
+                - total (int): Total number of rows.
+                - count (int): Number of unique rows among the chosen columns.
+                - delta (float): Proportion of unique rows to total rows.
     """
 
     columns: Union[List[str], str]
@@ -578,9 +636,19 @@ class CountUnique(Metric):
 
 @dataclass
 class CountValue(Metric):
-    """Number of values in chosen column.
+    """
+    A metric to count the number of rows in a dataframe or databse table
+    where the value in the chosen column matches a given value.
 
-    Count rows that value in chosen column is equal to 'value'.
+    Parameters:
+        - column (str): The name of the column in which to search for the target value.
+        - value (Union[str, int, float]): The target value to count in the chosen column.
+
+    Returns:
+        A dictionary containing the following metrics:
+            - total: Total number of rows in the DataFrame.
+            - count: Number of rows with the target value in the chosen column.
+            - delta: Proportion of rows with the target value out of the total number of rows.
     """
 
     column: str
@@ -669,11 +737,21 @@ class CountValue(Metric):
 
 @dataclass
 class CountBelowValue(Metric):
-    """Number of values below threshold.
+    """
+    A metric class to calculate counts of values below a specified threshold
+    within a column of a dataframe or database table.
 
-    Count values in chosen column
-    that are lower than defined threshold ('value').
-    If 'strict' == False, then inequality is non-strict.
+    Parameters:
+        - column (str): The name of the column for which the value counts are calculated.
+        - value (float): The threshold value used for comparison.
+        - strict (bool, optional): If True, values strictly below the threshold are counted;
+            Otherwise, values below or equal to the threshold are counted. Defaults to True.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing the calculated metrics:
+            - total (int): Total number of rows.
+            - count (int): Number of values below the specified threshold.
+            - delta (float): Ratio of the count of values below the threshold to the total number of rows.
     """
 
     column: str
@@ -775,10 +853,27 @@ class CountBelowValue(Metric):
 
 @dataclass
 class CountBelowColumn(Metric):
-    """Count how often column X below Y.
+    """
+    This metric calculates the number of rows where the values in 'column_x' are
+    strictly less than (or less than or equal to, based on 'strict' parameter) the
+    values in 'column_y'.
 
-    Calculate number of rows that value in 'column_x'
-    is lower than value in 'column_y'.
+    Parameters:
+        - column_x : str
+            The name of the first column for comparison.
+        - column_y : str
+            The name of the second column for comparison.
+        - strict : bool, optional
+            If True (default), comparisons will be strict (<).
+            If False, comparisons will be non-strict (<=).
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing computed metrics:
+                - total: Total number of rows.
+                - count: Number of rows satisfying the comparison condition.
+                - delta: Ratio of rows satisfying the condition to the total rows.
+
     """
 
     column_x: str
@@ -876,11 +971,28 @@ class CountBelowColumn(Metric):
 
 @dataclass
 class CountRatioBelow(Metric):
-    """Count how often X / Y below Z.
+    """
+    This metric calculates the number of rows in a dataset where the ratio of values
+    in the specified columns 'column_x' and 'column_y' is lower than the value in the 'column_z'.
+    The strictness of the inequality is determined by the 'strict' parameter.
 
-    Calculate number of rows that ratio of values
-    in columns 'column_x' and 'column_y' is lower than value in 'column_z'.
-    If 'strict' == False, then inequality is non-strict.
+    Parameters:
+        - column_x : str
+            The name of the column representing the numerator (X) in the ratio calculation.
+        - column_y : str
+            The name of the column representing the denominator (Y) in the ratio calculation.
+        - column_z : str
+            The name of the column containing the threshold value (Z) for comparison.
+        - strict : bool, optional (default=False)
+            If True, the inequality comparison is strict (less than).
+            If False, the comparison is non-strict (less than or equal to).
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing the following metrics:
+                - total: Total number of rows.
+                - count: Number of rows satisfying the condition (X / Y < Z).
+                - delta: Proportion of rows satisfying the condition relative to the total.
     """
 
     column_x: str
@@ -989,9 +1101,23 @@ class CountRatioBelow(Metric):
 
 @dataclass
 class CountCB(Metric):
-    """Lower/upper bounds for N%-confidence interval.
+    """
+    This metric calculates confidence bounds on a given column's values in a dataframe or database column.
+    The confidence bounds are calculated using the specified confidence level.
 
-    Calculate bounds for 'conf'-percent interval in chosen column.
+    Parameters:
+        - column (str): The name of the column for which confidence bounds will be calculated.
+        - conf (float, optional): Confidence level for calculating bounds. Should be in the range [0, 1].
+            Defaults to 0.95.
+
+    Raises:
+        ValueError: If the provided confidence level is outside the interval [0, 1].
+
+    Returns:
+        Dict[str, any]
+            A dictionary containing the calculated lower and upper confidence bounds:
+                - lcb (lower confidence bound).
+                - ucb (upper confidence bound).
     """
 
     column: str
@@ -1118,18 +1244,25 @@ class CountCB(Metric):
 @dataclass
 class CountLag(Metric):
     """
-    A lag between the last datetime value in the table and today.
+    A metric class for calculating time lag between the maximum datetime value
+    in a specified column and a reference time (either the current time or a user-provided time).
 
-    Args:
-        column (str):
-            Column name for datetime value from table
-        step (str, optional):
-            Determine step for difference between datetimes: {`day`, `hour`, `minute`}
-            Defaults to `day`
-
-        _today_test (str, optional):
+    Parameters:
+        - column (str): The name of the column containing datetime values for calculation.
+        - step (str, optional): The time unit for lag calculation. Can be 'day', 'hour', or 'minute'. Defaults to 'day'.
+        - _today_test (datetime, optional): A reference datetime for lag calculation.
             Only for tests, don't use in other cases!
-            Defaults to None
+            Defaults to None, which uses the current time.
+
+    Raises:
+        ValueError: If `step` is not one of 'day', 'hour', or 'minute'.
+        TypeError: If `_today_test` is provided but is not of type `datetime`.
+
+    Dict[str, Any]
+        A dictionary containing the following metrics:
+            - today: Current or user-provided time.
+            - last_dt: Max datetime value in `column`.
+            - lag: Lag duration.
     """
 
     column: str
@@ -1145,6 +1278,16 @@ class CountLag(Metric):
                 raise TypeError("Type of parameter `_today_test` must be `datetime`.")
 
     def _lag(self, last_dt: datetime) -> Dict:
+        """
+        Calculate the lag between a given datetime and a reference datetime.
+
+        Parameters:
+            last_dt (datetime): The datetime to calculate lag from.
+
+        Returns:
+            Dict: A dictionary containing calculated lag information, including today's datetime,
+                  the last datetime, and the lag duration.
+        """
         if self._today_test:
             today = self._today_test
         else:
@@ -1239,11 +1382,23 @@ class CountLag(Metric):
 
 @dataclass
 class CountAboveValue(Metric):
-    """Number of values greater than threshold.
+    """
+    A metric for calculating the count of values above or equal to a threshold
+    in a specified column of a dataset.
 
-    Count values in chosen column
-    that are greater than defined threshold ('value').
-    If 'strict' == False, then inequality is non-strict.
+    Parameters:
+        - column (str): The name of the column for which to calculate the count.
+        - value (float): The threshold value used to compare against the column values.
+        - strict (bool, optional): If True, only counts values strictly above the threshold.
+            If False, counts values above or equal to the threshold. Defaults to False.
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing the calculated metrics:
+                - total (int): Total number of rows.
+                - count (int): Number of values above the specified threshold.
+                - delta (float): Ratio of the count of values above the threshold to the total number of rows.
+
     """
 
     column: str
@@ -1348,10 +1503,19 @@ class CountAboveValue(Metric):
 
 @dataclass
 class CountValueInSet(Metric):
-    """Number of values that satisfy possible values set.
+    """
+    A metric to count the occurrence of values in a specific set
+    within dataframe or database table column.
 
-    Count values in chosen column
-    that are included in the given list ('required_set').
+    Parameters:
+        - column (str): The name of the column in the DataFrame to analyze.
+        - required_set (List): A list of values to count occurrences of in the specified column.
+
+    Returns:
+        dict[str, Any]: A dictionary containing the following metrics:
+            - total (int): Total number of rows.
+            - count (int): Count of rows where the values in the specified column are in the required_set.
+            - delta (float): Proportion of rows with values in the required_set out of the total rows.
     """
 
     column: str
@@ -1435,11 +1599,26 @@ class CountValueInSet(Metric):
 
 @dataclass
 class CountValueInBounds(Metric):
-    """Number of values that are inside available bounds.
-
-    Count values in chosen column that do satisfy defined bounds:
+    """
+    Count values in the chosen column that do satisfy defined bounds:
     they are greater than 'lower_bound' or lower than 'upper_bound'.
     If 'strict' is False, then inequalities are non-strict.
+
+    Parameters:
+        - column (str): The column containing the values to be counted.
+        - lower_bound (float): The lower bound for the acceptable values.
+        - upper_bound (float): The upper bound for the acceptable values.
+        - strict (bool, optional): If True, strict inequalities are used (default is False).
+
+    Raises:
+        ValueError: If the lower bound is greater than the upper bound.
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing the following metrics:
+                - total (int): The total number of rows.
+                - count (int): The number of values within the defined bounds.
+                - delta (float): The ratio of values within bounds to the total number of values.
     """
 
     column: str
@@ -1573,12 +1752,28 @@ class CountValueInBounds(Metric):
 
 @dataclass
 class CountExtremeValuesFormula(Metric):
-    """Number of extreme values calculated by formula.
+    """
+    This metric calculates the mean and standard deviation in a chosen column of a dataset.
 
-    Calculate mean and std in chosen column.
-    Count values in chosen column that are
-    greater than mean + std_coef * std if style == 'greater',
-    lower than mean - std_coef * std if style == 'lower'.
+    It then counts the values in the chosen column that are considered extreme based on a chosen style:
+        - for 'greater' style counts values greater than mean + std_coef * std
+        - for 'lower' style counts values lower than mean - std_coef * std
+
+    Parameters:
+        - column (str): The name of the column for which extreme values will be calculated.
+        - std_coef (int): The coefficient by which the standard deviation is multiplied.
+        - style (str, optional): The style for calculating extreme values ('greater' or 'lower').
+            Defaults to 'greater'.
+
+    Raises:
+        ValueError: If the provided style is not 'greater' or 'lower'.
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing the following metrics:
+                - total (int): The total number of rows.
+                - count (int): The count of extreme values in the chosen column.
+                - delta (float): The ratio of extreme values to total rows.
     """
 
     column: str
@@ -1715,12 +1910,27 @@ class CountExtremeValuesFormula(Metric):
 
 @dataclass
 class CountExtremeValuesQuantile(Metric):
-    """Number of extreme values calculated with quantile.
+    """
+    This metric calculates the quantile of a chosen column in a dataset.
+        - If the 'style' parameter is set to 'greater', it counts the values in the 'column' that are greater
+    than the calculated quantile.
+        - If 'style' is set to 'lower', it counts values lower than the quantile.
 
-    Calculate quantile in chosen column.
-    If style == 'greater', then count values in 'column' that are greater than
-    calculated quantile. Otherwise, if style == 'lower', count values that are lower
-    than calculated quantile.
+    Parameters:
+        - column (str): The name of the column for which quantiles are calculated.
+        - q (float, optional): The quantile value to calculate (default is 0.8).
+        - style (str, optional): The counting style, either 'greater' or 'lower' (default is 'greater').
+
+    Raises:
+        - ValueError: If 'style' is not 'greater' or 'lower'.
+        - ValueError: If 'q' is not in the interval [0, 1].
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing the following metrics:
+                - total (int): Total number of rows in the dataset.
+                - count (int): Number of extreme values based on the chosen quantile and style.
+                - delta (float): Proportion of extreme values to the total number of rows.
     """
 
     column: str
@@ -1866,11 +2076,26 @@ class CountExtremeValuesQuantile(Metric):
 
 @dataclass
 class CountLastDayRowsPercent(Metric):
-    """Check if number of values in last day is at least 'percent'% of the average.
+    """
+    This metric calculates the average number of rows per day in a chosen date column.
+    It then compares the number of rows on the last day to the calculated average.
+    If the number of rows on the last day is at least 'percent'% of the calculated average,
+    the metric returns True; otherwise, it returns False.
 
-    Calculate average number of rows per day in chosen date column.
-    If number of rows in last day is at least 'percent' value of the average, then
-    return True, else return False.
+    Parameters:
+        - column (str): The name of the date column in the DataFrame.
+        - percent (float, optional): The percentage threshold to check against (default is 80).
+
+    Raises:
+        ValueError: If the percent value is less than 0.
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing the calculated metrics:
+                - average (float): The average number of rows per day, excluding the last day.
+                - last_date_count (int): The number of rows on the last day.
+                - percentage (float): The percentage of rows on the last day compared to the average.
+                - f'at_least_{self.percent}%' (bool): Whether the condition is met (True) or not (False).
     """
 
     column: str
@@ -2044,24 +2269,23 @@ class CountLastDayRowsPercent(Metric):
 @dataclass
 class CountLastDayRows(Metric):
     """
-    A metric class for calculating statistics related to the last day's data in a DataFrame.
+    This metric calculates the median count of rows for each day (excluding the last day),
+    the number of rows on the last day and the ratio of the last day's row count
+    to the median count of previous days.
 
-    This class calculates the median count of rows for each day (excluding the last day),
-    the number of rows on the last day
-    and the ratio of the last day's row count to the median count of previous days.
-
-    Attributes:
-        column (str): The column in the DataFrame containing the date/datetime information.
-        skip_unfinished (bool): If True, incomplete last day rows are skipped during calculations.
-
-    Returns:
-        dict: A dictionary containing calculated metrics:
-            - "median": The median count of rows for each day (excluding the last day).
-            - "last": Rows count for the last available day.
-            - "ratio": last / median.
+    Parameters:
+        - column (str): The column in the DataFrame containing the date/datetime information.
+        - skip_unfinished (bool): If True, incomplete last day rows are skipped during calculations.
 
     Raises:
         ValueError: If there are None/nan values in the specified column_day.
+
+    Returns:
+        Dict[str, Any]:
+            A dictionary containing calculated metrics:
+                - median: The median count of rows for each day (excluding the last day).
+                - last: Rows count for the last available day.
+                - ratio: last / median.
     """
 
     column: str = "day"
@@ -2297,9 +2521,33 @@ class CountLastDayRows(Metric):
 @dataclass
 class CountFewLastDayRows(Metric):
     """
-    Calculate average number of rows per day in chosen date column.
-    For each of the last 'number' days, check if number of rows in the day
-    is at least 'percent' of the average.
+    Calculate average number of rows per day in the chosen date column.
+    For each of the last 'number' days, check if the number of rows in the day
+    is at least 'percent' of the calculated average.
+
+    Parameters:
+        - column : str
+            The name of the date column in the DataFrame.
+        - percent : float, optional
+            The minimum percentage threshold for the number of rows in a day compared to the average.
+            Default is 80.
+        - number : int, optional
+            The number of most recent days to consider for comparison.
+            Default is 2.
+
+    Raises:
+        ValueError:
+            - If the 'percent' value is less than or equal to 0.
+            - If the 'number' value is less than or equal to 0.
+            - If there are None/nan values in the specified column.
+            - If the 'number' value is greater than or equal to the total number of unique days.
+
+    Returns:
+        Dict[str, Any]:
+            A dictionary containing the calculated metrics:
+                - average: Average number of rows per day.
+                - days: Count of days satisfying the condition.
+
     """
 
     column: str
@@ -2481,21 +2729,36 @@ class CountFewLastDayRows(Metric):
 
 @dataclass
 class CheckAdversarialValidation(Metric):
-    """Apply adversarial validation technic.
+    """
+    This class applies the adversarial validation technique to determine whether the distributions
+    of two given slices of data are similar or not. The technique assesses the potential for
+    one slice to be mistaken for the other in a classification task. If the distributions of the two
+    slices are indistinguishable, the method returns True. Otherwise, it returns False and provides
+    information about which columns might have crucial differences.
 
-    Define indexes for first and second slices.
-    To get slices of initial dataset uses indexes for pandas dataframe
-    otherwise values from specified column.
+    The comparison is based on a binary classification model's performance. A RandomForestClassifier
+    is used to predict whether an instance belongs to the first or second slice. The area under the
+    ROC curve (roc_auc_score) is used as a measure of separability. If the score is close to 0.5,
+    the slices are considered similar; otherwise, they are considered dissimilar.
 
-    For given slices of data apply adversarial technic
-    to check if distributions of slices are the same or not.
-    If there is a doubt about first slice being
-    indistinguishable with the second slice,
-    then return False and list of column names
-    that might include some crucial differences.
-    Otherwise, if classification score is about 0.5, return True.
+    Numerical columns are taken into consideration for the comparison.
 
-    Take into consideration only numerical columns.
+    Parameters:
+        - first_slice (tuple): A tuple defining the indices or values that define the first slice.
+        - second_slice (tuple): A tuple defining the indices or values that define the second slice.
+        - eps (float, optional): A threshold for considering two slices similar. Default is 0.05.
+        - column (str, optional): The column name to use for indexing DataFrame slices. Default is "index".
+
+    Raises:
+        ValueError: If the slice lengths are not 2, or if the start values are greater than
+        or equal to the end values, or if the slices overlap.
+
+    Returns:
+        Dict[str, Anu]
+            A dictionary containing the following metrics:
+                - similar (bool): Indicates whether the two slices are similar.
+                - importances (dict): A dictionary mapping feature names to their importance values.
+                - cv_roc_auc (float): The cross-validated ROC AUC score of the classifier.
     """
 
     first_slice: tuple
@@ -2911,20 +3174,19 @@ class CountLastDayAvg(Metric):
     considering the last day's value and the median of daily means of that column.
 
     Parameters:
-        column (str): The name of the column for which metrics will be calculated.
-        column_day (str, optional): The name of the column containing date/datetime information.
-            Default is "day".
-        skip_unfinished (bool, optional): If True, incomplete last day will be skipped
-            in calculations. Default is True.
-
-    Returns:
-        dict: A dictionary containing calculated metrics:
-            - "median": The median of daily means of the specified column.
-            - "last": The average value of the specified column for the last available day.
-            - "ratio": The ratio of the last day's average to the median of daily means.
+        - column (str): The name of the column for which metrics will be calculated.
+        - column_day (str, optional): The name of the column containing date/datetime information. Default is "day".
+        - skip_unfinished (bool, optional): If True, incomplete last day will be skipped in calculations. Default is True.
 
     Raises:
         ValueError: If there are None/nan values in the specified column_day.
+
+    Returns:
+        Dict[str, Any]
+            A dictionary containing calculated metrics:
+                - median: The median of daily means of the specified column.
+                - last: The average value of the specified column for the last available day.
+                - ratio": The ratio of the last day's average to the median of daily means.
     """
 
     column: str
