@@ -7,7 +7,7 @@ with open("README.md", 'r', encoding="utf-8") as f:
 
 setup(
     name='pure-data',
-    version = '0.1.6.3',
+    version = '0.1.6.4',
     author='BOGDAN PECHENKIN',
     author_email='uberkinder@yandex.com',
     description='Pure Data Framework',
@@ -16,7 +16,7 @@ setup(
     url = 'https://github.com/SimulatorML/Pure-Data',
     install_requires=[],
     packages=setuptools.find_packages(),
-    python_requires='>=3.8',
+    python_requires='>=3.10',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
