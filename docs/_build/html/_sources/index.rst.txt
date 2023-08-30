@@ -10,8 +10,8 @@ Welcome to Pure-Data's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   ./metrics.rst
    ./report.rst
+   ./metrics.rst
 
 Indices and tables
 ==================
