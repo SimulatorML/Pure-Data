@@ -1,5 +1,3 @@
-.. _module-metrics:
-
 Metrics
 =======
 
