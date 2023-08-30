@@ -7,7 +7,7 @@ with open("README.md", 'r', encoding="utf-8") as f:
 
 setup(
     name='pure-data',
-    version = '0.1.6.4',
+    version = '0.1.6.5',
     author='BOGDAN PECHENKIN',
     author_email='uberkinder@yandex.com',
     description='Pure Data Framework',

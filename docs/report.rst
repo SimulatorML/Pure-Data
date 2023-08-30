@@ -1,5 +1,3 @@
-.. _module-report:
-
 Report
 ======
 
