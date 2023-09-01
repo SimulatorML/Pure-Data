@@ -7,13 +7,16 @@ with open("README.md", 'r', encoding="utf-8") as f:
 
 setup(
     name='pure-data',
-    version = '0.1.6.5',
+    version = '0.1.6.6',
     author='BOGDAN PECHENKIN',
     author_email='uberkinder@yandex.com',
     description='Pure Data Framework',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url = 'https://github.com/SimulatorML/Pure-Data',
+    project_urls={
+        'GitHub': 'https://github.com/SimulatorML/Pure-Data',
+        'Documentation': 'https://pure-data.readthedocs.io/en/latest/index.html',
+    },
     install_requires=[],
     packages=setuptools.find_packages(),
     python_requires='>=3.10',
