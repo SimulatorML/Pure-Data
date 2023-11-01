@@ -52,6 +52,10 @@ class Report:
             For `None` value - column width is unlimited and varies depending on its content.
         verbose (bool, optional):
             If True, prints verbose output during metric calculations. Defaults to False.
+        max_fails_num (int, optional):
+            The maximum number of failed checks. Defaults to None.
+        max_errors_num (int, optional):
+            The maximum number of checks with errors. Defaults to None.
 
     Properties:
         df (Pandas DataFrame):
@@ -90,6 +94,8 @@ class Report:
     decimal_places: int = 3
     table_max_col_width: int = 69
     verbose: bool = False
+    max_fails_num: int = None
+    max_errors_num: int = None
 
     _cached_reports = _cache
     _result = {}
