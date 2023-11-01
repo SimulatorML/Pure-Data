@@ -88,7 +88,7 @@ class Report:
     checklist: List[CheckType]
     engine: str = "pandas"
     decimal_places: int = 3
-    table_max_col_width: int = None
+    table_max_col_width: int = 69
     verbose: bool = False
 
     _cached_reports = _cache
