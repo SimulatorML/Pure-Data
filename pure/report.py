@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Union, TYPE_CHECKING
 
+from termcolor import colored
+
 import pandas as pd
 from tqdm import tqdm
 
@@ -307,10 +309,15 @@ class Report:
             str: A string summarizing the DQ report, including table names, engine, data frame representation,
                 and statistics on the total checks, passed checks, failed checks, and errors.
         """
+        status_text = ['OK', 'Some Issues', 'Critical Issues']
+
+        status_colors = {0: 'green', 1: 'yellow', 2: 'red'}
+
         result = (
             f"DQ Report for tables {self.stats['tables']}, engine: `{self.engine}`.\n"
             f"{tabulate(self.df, headers='keys', tablefmt='psql', showindex=False, maxcolwidths=self.table_max_col_width)}\n"
-            f"Total checks: {self.stats['total']},  passed: {self.stats['passed']}, failed: {self.stats['failed']}, errors: {self.stats['errors']}."
+            f"Total checks: {self.stats['total']},  passed: {self.stats['passed']}, failed: {self.stats['failed']}, errors: {self.stats['errors']}.\n"
+            f"Status: {colored(status_text[self.stats['status_id']], status_colors.get(self.stats['status_id']))}"
         )
 
         return result
@@ -349,7 +356,7 @@ class Report:
         """
         if not self._result:
             raise ValueError('Empty report, no entries found.')
-        
+
         critical_issue_found = False
 
         for table_name, metric, _ in self.checklist:
@@ -362,7 +369,6 @@ class Report:
                     critical_issue_found = True
                     break
 
-        status_text = ['OK', 'Some Issues', 'Critical Issues']
         total_checks = self._result['stats']['total']
         failed_checks = self._result['stats']['failed']
         error_checks = self._result['stats']['errors']
@@ -400,5 +406,5 @@ class Report:
             'passed': self._result['stats']['passed'],
             'failed': failed_checks,
             'errors': error_checks,
-            'status': status_text[status_id],
+            'status_id': status_id
         }
