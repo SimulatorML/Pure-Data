@@ -55,16 +55,25 @@ class Report:
         verbose (bool, optional):
             If True, prints verbose output during metric calculations. Defaults to False.
         max_fails_num (int, optional):
-            The maximum number of failed checks. Defaults to None.
+            The maximum allowable number of failed checks.
+            This parameter sets a threshold for the number of checks that can fail.
+            If this value is set to 0, the status “OK” will be in the case when no errors or fails were detected during the check.
+            If this value is set to None (the default), the number of failed checks does not influence the overall status of the report.
+            Defaults to None.
         max_errors_num (int, optional):
-            The maximum number of checks with errors. Defaults to None.
+            The maximum allowable number of checks that can encounter errors. 
+            This parameter sets a threshold for the number of checks that can result in errors. 
+            If this value is set to 0, the status “OK” will be in the case when no errors or fails were detected during the check.
+            If this value is set to None (the default), the number of checks with errors does not affect the overall status of the report.
+            Defaults to None.
 
     Properties:
         df (Pandas DataFrame):
             Get the DataFrame representation of the report:
                 - table:      Checked table name
                 - metric:     Metric parameters
-                - metric:     Metric values for checked table
+                - critical:   'True' if metric is critical or 'False' if not
+                - values:     Metric values for checked table
                 - limits:     Non-strict lower and upper bound for specified metric value
                 - status:     `.` check is passed, `F` check is not passed, `E` erorr during check
                 - error:      Error message if check is failed, otherwise empty string
@@ -94,7 +103,7 @@ class Report:
     checklist: List[CheckType]
     engine: str = "pandas"
     decimal_places: int = 3
-    table_max_col_width: int = 68
+    table_max_col_width: int = None
     verbose: bool = False
     max_fails_num: int = None
     max_errors_num: int = None
@@ -219,7 +228,8 @@ class Report:
                 except Exception as ex:
                     status = 'E'
                     error = str(ex)
-
+                
+                row['critical'] = metric.critical
                 row['values'] = metric_values
                 row['limits'] = str_limits
                 row['status'] = status
@@ -239,7 +249,7 @@ class Report:
 
         df = pd.DataFrame(
             data=rows,
-            columns=['table', 'metric', 'values', 'limits', 'status', 'error'],
+            columns=['table', 'metric', 'critical', 'values', 'limits', 'status', 'error'],
         )
 
         self._result = {
@@ -309,15 +319,20 @@ class Report:
             str: A string summarizing the DQ report, including table names, engine, data frame representation,
                 and statistics on the total checks, passed checks, failed checks, and errors.
         """
-        status_text = ['OK', 'Some Issues', 'Critical Issues']
+        status_text_colors = {
+            0: ('OK', 'green'),
+            1: ('Some Issues', 'yellow'),
+            2: ('Critical Issues', 'red')
+            }
 
-        status_colors = {0: 'green', 1: 'yellow', 2: 'red'}
+        status_text = status_text_colors[self.stats['status_id']][0]
+        status_color = status_text_colors[self.stats['status_id']][1]
 
         result = (
             f"DQ Report for tables {self.stats['tables']}, engine: `{self.engine}`.\n"
             f"{tabulate(self.df, headers='keys', tablefmt='psql', showindex=False, maxcolwidths=self.table_max_col_width)}\n"
             f"Total checks: {self.stats['total']},  passed: {self.stats['passed']}, failed: {self.stats['failed']}, errors: {self.stats['errors']}.\n"
-            f"Status: {colored(status_text[self.stats['status_id']], status_colors.get(self.stats['status_id']))}"
+            f"Status: {colored(status_text, status_color)}"
         )
 
         return result
@@ -357,54 +372,32 @@ class Report:
         if not self._result:
             raise ValueError('Empty report, no entries found.')
 
-        critical_issue_found = False
+        df = self.df
+        critical_issues_count = df[(df['critical']) & (df['status'].isin(['F', 'E']))].shape[0]
 
-        for table_name, metric, _ in self.checklist:
-            if metric.critical:
-                # Get status for critical metrics
-                metric_statuses = self._result['df'][(self._result['df']['table'] == table_name)
-                                                      &
-                                                      (self._result['df']['metric'] == repr(metric))]['status']
-                if any(status in ['F', 'E'] for status in metric_statuses):
-                    critical_issue_found = True
-                    break
-
-        total_checks = self._result['stats']['total']
-        failed_checks = self._result['stats']['failed']
-        error_checks = self._result['stats']['errors']
-
-        status_id = 0
-
-        if self.max_fails_num is not None:
-
-            if failed_checks == 0:
-                status_id = 0 # 'OK'
-
-            elif failed_checks >= self.max_fails_num:
-                status_id = 2  # 'Critical Issues'
-
-            elif 0 < failed_checks < self.max_fails_num:
-                status_id = 1  # 'Some Issues'
-
-        if self.max_errors_num is not None:
-
-            if error_checks == 0:
-                status_id = max(status_id, 0) # 'OK' if status_id < 1
-
-            elif error_checks >= self.max_errors_num:
-                status_id = max(status_id, 2)  # 'Critical Issues'
-
-            elif 0 < error_checks < self.max_errors_num:
-                status_id = max(status_id, 1) # 'Some Issues' if status id < 2
-
-        if critical_issue_found:
+        if critical_issues_count > 0:
             status_id = 2
 
-        return {
-            'tables': self._result['stats']['tables'],
-            'total': total_checks,
-            'passed': self._result['stats']['passed'],
-            'failed': failed_checks,
-            'errors': error_checks,
-            'status_id': status_id
-        }
+        else:
+
+            failed_checks = self._result['stats']['failed']
+            error_checks = self._result['stats']['errors']
+
+            status_id = 0 if failed_checks == 0 and error_checks == 0 or \
+                self.max_errors_num is None and self.max_fails_num is None else 1
+
+            if failed_checks >= (self.max_fails_num or (failed_checks + 1)) or \
+            error_checks >= (self.max_errors_num or (error_checks + 1)):
+                status_id = 2
+
+            if self.max_fails_num == 0:
+                if failed_checks > 0:
+                    status_id = 2
+
+            if self.max_errors_num == 0:
+                if error_checks > 0:
+                    status_id = 2
+
+        self._result['stats']['status_id'] = status_id
+
+        return self._result['stats']
