@@ -127,6 +127,8 @@ class CountTotal(Metric):
             - total: Total number of rows.
     """
 
+    critical: bool = False
+
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         return {"total": len(df)}
 
@@ -182,6 +184,7 @@ class CountZeros(Metric):
     """
 
     column: str
+    critical: bool = False
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -279,6 +282,7 @@ class CountNull(Metric):
 
     columns: Union[List[str], str]
     aggregation: str = "any"  # either "all", or "any"
+    critical: bool = False
 
     def __post_init__(self):
         if self.aggregation not in ["all", "any"]:
@@ -407,6 +411,7 @@ class CountDuplicates(Metric):
     """
 
     columns: Union[List[str], str]
+    critical: bool = False
 
     def __post_init__(self):
         if isinstance(self.columns, str):
@@ -529,6 +534,7 @@ class CountUnique(Metric):
     """
 
     columns: Union[List[str], str]
+    critical: bool = False
 
     def __post_init__(self):
         if isinstance(self.columns, str):
@@ -653,6 +659,7 @@ class CountValue(Metric):
 
     column: str
     value: Union[str, int, float]
+    critical: bool = False
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -757,6 +764,7 @@ class CountBelowValue(Metric):
     column: str
     value: float
     strict: bool = True
+    critical: bool = False
 
     def __post_init__(self):
         self._cmp_sign = '<' if self.strict else '<='
@@ -879,6 +887,7 @@ class CountBelowColumn(Metric):
     column_x: str
     column_y: str
     strict: bool = True
+    critical: bool = False
 
     def __post_init__(self):
         self._cmp_sign = '<' if self.strict else '<='
@@ -999,6 +1008,7 @@ class CountRatioBelow(Metric):
     column_y: str
     column_z: str
     strict: bool = False
+    critical: bool = False
 
     def __post_init__(self):
         self._cmp_sign = '<' if self.strict else '<='
@@ -1122,6 +1132,7 @@ class CountCB(Metric):
 
     column: str
     conf: float = 0.95
+    critical: bool = False
 
     def __post_init__(self):
         if not 0 <= self.conf <= 1:
@@ -1268,6 +1279,7 @@ class CountLag(Metric):
     column: str
     step: str = 'day'
     _today_test: datetime = None
+    critical: bool = False
 
     def __post_init__(self):
         if self.step not in ['day', 'hour', 'minute']:
@@ -1404,6 +1416,7 @@ class CountAboveValue(Metric):
     column: str
     value: float
     strict: bool = False
+    critical: bool = False
 
     def __post_init__(self):
         self._cmp_sign = '>' if self.strict else '>='
@@ -1520,6 +1533,7 @@ class CountValueInSet(Metric):
 
     column: str
     required_set: List
+    critical: bool = False
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         n = len(df)
@@ -1625,6 +1639,7 @@ class CountValueInBounds(Metric):
     lower_bound: float
     upper_bound: float
     strict: bool = False
+    critical: bool = False
 
     def __post_init__(self):
         if self.lower_bound > self.upper_bound:
@@ -1779,6 +1794,7 @@ class CountExtremeValuesFormula(Metric):
     column: str
     std_coef: int
     style: str = "greater"
+    critical: bool = False
 
     def __post_init__(self):
         if self.style not in ["greater", "lower"]:
@@ -1936,6 +1952,7 @@ class CountExtremeValuesQuantile(Metric):
     column: str
     q: float = 0.8
     style: str = "greater"
+    critical: bool = False
 
     def __post_init__(self):
         if self.style not in ["greater", "lower"]:
@@ -2100,6 +2117,7 @@ class CountLastDayRowsPercent(Metric):
 
     column: str
     percent: float = 80
+    critical: bool = False
 
     def __post_init__(self):
         if self.percent < 0:
@@ -2290,6 +2308,7 @@ class CountLastDayRows(Metric):
 
     column: str = "day"
     skip_unfinished: bool = True
+    critical: bool = False
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         empty_rows_qty = np.sum(df[self.column].isna())
@@ -2553,6 +2572,7 @@ class CountFewLastDayRows(Metric):
     column: str
     percent: float = 80
     number: int = 2
+    critical: bool = False
 
     def __post_init__(self):
         if self.percent < 0:
@@ -2765,6 +2785,7 @@ class CheckAdversarialValidation(Metric):
     second_slice: tuple
     eps: float = 0.05
     column: str = "index"
+    critical: bool = False
 
     def __post_init__(self):
         if len(self.first_slice) != 2 or len(self.second_slice) != 2:
@@ -3192,6 +3213,7 @@ class CountLastDayAvg(Metric):
     column: str
     column_day: str = "day"
     skip_unfinished: bool = True
+    critical: bool = False
 
     def _call_pandas(self, df: pd.DataFrame) -> Dict[str, Any]:
         empty_rows_qty = np.sum(df[self.column_day].isna())

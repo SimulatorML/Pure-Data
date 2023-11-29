@@ -7,3 +7,5 @@ pure_data.egg-info
 _build
 _static
 _templates
+.DS_store
+pure/.DS_Store
